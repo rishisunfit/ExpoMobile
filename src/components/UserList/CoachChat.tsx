@@ -19,6 +19,8 @@ import Icon from "react-native-vector-icons/FontAwesome6";
 import { supabase } from "../../../lib/supabase";
 import { getUser } from "../../services/auth.services";
 import { getAllMessages, sendChat } from "../../services/coach.services";
+import * as ImagePicker from "expo-image-picker";
+import { Audio } from "expo-av";
 
 const CoachChat: React.FC = () => {
   const route =
@@ -36,7 +38,11 @@ const CoachChat: React.FC = () => {
   const [lastMessageTimestamp, setLastMessageTimestamp] = useState<
     string | undefined
   >(undefined);
-
+  const [image, setImage] = useState<string | null>(null);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recordingUri, setRecordingUri] = useState<string | null>(null);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [permissionResponse, requestPermission] = Audio.usePermissions();
   // Fetch initial messages and user
   useEffect(() => {
     const init = async () => {
@@ -142,6 +148,80 @@ const CoachChat: React.FC = () => {
     }
   }, [chat.id, newMessage, currentUser?.id, coach.id]);
 
+  const pickImage = async () => {
+    // No permissions request is necessary for launching the image library
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images", "videos"],
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+
+    console.log(result);
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
+
+  const handleImagePress = async () => {
+    await pickImage();
+  };
+
+  async function startRecording() {
+    try {
+      if (permissionResponse?.status !== "granted") {
+        await requestPermission();
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      setRecording(recording);
+      setRecordingUri(null); // clear previous recording
+    } catch (err) {
+      console.error("Failed to start recording", err);
+    }
+  }
+
+  async function stopRecording() {
+    try {
+      await recording?.stopAndUnloadAsync();
+      const uri = recording?.getURI();
+      setRecording(null);
+      setRecordingUri(uri || null);
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+      });
+    } catch (err) {
+      console.error("Failed to stop recording", err);
+    }
+  }
+  const playRecording = async () => {
+    if (!recordingUri) return;
+    try {
+      const { sound } = await Audio.Sound.createAsync({ uri: recordingUri });
+      setSound(sound);
+      await sound.playAsync();
+    } catch (err) {
+      console.error("Failed to play recording", err);
+    }
+  };
+
+  useEffect(() => {
+    return sound
+      ? () => {
+          sound.unloadAsync();
+        }
+      : undefined;
+  }, [sound]);
+
   const renderMessageItem = ({ item }: { item: any }) => {
     const isCoach = item.sender_id === coach.id;
     return isCoach ? (
@@ -235,22 +315,70 @@ const CoachChat: React.FC = () => {
         renderChatContainer()
       )}
       <View style={styles.messageInputBar}>
-        <TouchableOpacity>
-          <Icon name="plus" size={20} color="#64748b" />
-        </TouchableOpacity>
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.input}
-            placeholder="Type a message..."
-            placeholderTextColor="#64748b"
-            value={newMessage}
-            onChangeText={setNewMessage}
-            onSubmitEditing={sendMessage}
-          />
+        {image && (
+          <View>
+            <Image source={{ uri: image }} style={styles.imageContainer} />
+            <TouchableOpacity
+              onPress={() => setImage(null)}
+              style={styles.imageCloseButton}
+            >
+              <Icon name="xmark" size={10} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+        {recording && (
+          <View style={styles.recordingIndicator}>
+            <Text style={styles.recordingText}>Recording...</Text>
+            <TouchableOpacity onPress={stopRecording} style={styles.stopButton}>
+              <Icon name="stop" size={12} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {recordingUri && (
+          <View style={styles.audioPreview}>
+            <TouchableOpacity onPress={playRecording} style={styles.playButton}>
+              <Icon name="play" size={14} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.audioLabel}>Recorded Audio</Text>
+            <TouchableOpacity
+              onPress={() => setRecordingUri(null)}
+              style={styles.closeAudio}
+            >
+              <Icon name="xmark" size={12} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <TouchableOpacity onPress={handleImagePress}>
+            <Icon name="plus" size={20} color="#64748b" />
+          </TouchableOpacity>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder="Type a message..."
+              placeholderTextColor="#64748b"
+              value={newMessage}
+              onChangeText={setNewMessage}
+              onSubmitEditing={sendMessage}
+            />
+          </View>
+          <TouchableOpacity onPress={sendMessage}>
+            <Icon name="paper-plane" size={20} color="#10b981" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              if (recording) {
+                stopRecording();
+              } else {
+                startRecording();
+              }
+            }}
+          >
+            <Icon name="microphone" size={20} color="#64748b" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={sendMessage}>
-          <Icon name="paper-plane" size={20} color="#10b981" />
-        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -314,8 +442,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#f1f5f9",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
     paddingBottom: 50,
   },
@@ -344,5 +471,64 @@ const styles = StyleSheet.create({
   emptyText: {
     color: "#64748b",
     fontSize: 15,
+  },
+  imageContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    marginRight: 10,
+  },
+  imageCloseButton: {
+    position: "absolute",
+    top: -5,
+    right: 5,
+    zIndex: 1000,
+    backgroundColor: "gray",
+    borderRadius: 100,
+    padding: 5,
+  },
+  recordingIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fee2e2",
+    padding: 10,
+    borderRadius: 10,
+    gap: 10,
+  },
+  recordingText: {
+    color: "#b91c1c",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  stopButton: {
+    backgroundColor: "#dc2626",
+    padding: 8,
+    borderRadius: 100,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  audioPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 10,
+    gap: 10,
+  },
+  playButton: {
+    backgroundColor: "#10b981",
+    padding: 8,
+    borderRadius: 100,
+  },
+  audioLabel: {
+    flex: 1,
+    fontSize: 14,
+    color: "#1f2937",
+  },
+  closeAudio: {
+    backgroundColor: "#64748b",
+    padding: 8,
+    borderRadius: 100,
   },
 });
