@@ -11,7 +11,6 @@ import WorkoutCompleteScreen from "../screens/WorkoutCompleteScreen";
 import InboxScreen from "../screens/InboxScreen";
 import NutritionScreen from "../screens/NutritionScreen";
 import ProfileScreen from "../screens/ProfileScreen";
-import LoginScreen from "../screens/LoginScreen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 const Tab = createBottomTabNavigator();
