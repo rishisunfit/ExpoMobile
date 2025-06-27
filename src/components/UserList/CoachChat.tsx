@@ -1,3 +1,8 @@
+import { AntDesign } from "@expo/vector-icons";
+import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import { Audio } from "expo-av";
+import * as ImagePicker from "expo-image-picker";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -9,18 +14,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import { AntDesign } from "@expo/vector-icons";
-import { Conversation, User } from "../../types/types";
-import { defaultAvatar } from "../../assets";
 import Icon from "react-native-vector-icons/FontAwesome6";
 import { supabase } from "../../../lib/supabase";
+import { defaultAvatar } from "../../assets";
 import { getUser } from "../../services/auth.services";
-import { getAllMessages, sendChat } from "../../services/coach.services";
-import * as ImagePicker from "expo-image-picker";
-import { Audio } from "expo-av";
+import {
+  getAllMessages,
+  sendChat,
+  uploadFile,
+} from "../../services/coach.services";
+import { Tables } from "../../types/database";
+import { Conversation, User } from "../../types/types";
+import ImagePickerModal from "../modal/ImagePickerModal";
+import MessageBubble from "./MessageBubble";
 
 const CoachChat: React.FC = () => {
   const route =
@@ -43,6 +50,10 @@ const CoachChat: React.FC = () => {
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [permissionResponse, requestPermission] = Audio.usePermissions();
+  const [imageLoader, setImageLoader] = useState<boolean>(false);
+  const [isImagePickerModalVisible, setIsImagePickerModalVisible] =
+    useState<boolean>(false);
+
   // Fetch initial messages and user
   useEffect(() => {
     const init = async () => {
@@ -67,7 +78,9 @@ const CoachChat: React.FC = () => {
     };
 
     init();
+  }, []);
 
+  useEffect(() => {
     const channel = supabase
       .channel("chat-channel")
       .on(
@@ -80,12 +93,11 @@ const CoachChat: React.FC = () => {
         },
         (payload) => {
           const message = payload.new;
+          console.log("message", JSON.stringify(message, null, 2));
           // Show only messages between this user and this coach
           if (
-            (message.sender_id === currentUser?.id &&
-              message.receiver_id === coach.id) ||
-            (message.sender_id === coach.id &&
-              message.receiver_id === currentUser?.id)
+            message.sender_id === currentUser?.id ||
+            message.sender_id === coach.id
           ) {
             setMessages((prev) => [message, ...prev]);
           }
@@ -98,7 +110,11 @@ const CoachChat: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chat.id, currentUser?.id, coach.id]);
+  }, []);
+
+  useEffect(() => {
+    console.log("message", JSON.stringify(messages, null, 2));
+  }, [messages]);
 
   const fetchMoreMessages = async () => {
     if (!hasMore || isLoadingMore || !lastMessageTimestamp) return;
@@ -125,47 +141,83 @@ const CoachChat: React.FC = () => {
   };
 
   const sendMessage = useCallback(async () => {
-    if (!newMessage.trim()) return;
-    const tempMessage = {
-      id: Date.now(),
+    let newFile;
+    if (image?.length) {
+      const { file, error } = await sendImage();
+      if (file) {
+        newFile = file;
+      }
+      setImageLoader(false);
+    }
+
+    const tempMessage: Tables<"messages"> & {
+      receiver_id: string;
+    } = {
+      id: Date.now().toString(),
       content: newMessage.trim(),
       sender_id: currentUser?.id,
       receiver_id: coach.id,
       created_at: new Date().toISOString(),
       conversation_id: chat.id,
+      file_path: newFile?.path! ?? null,
+      file_name: newFile?.fullPath.split("/").pop() ?? null,
+      message_type: newFile ? "image" : "text",
     };
 
     setNewMessage(""); // Clear input immediately
     setMessages((prev) => [tempMessage, ...prev]); // Optimistic update
 
     try {
-      await sendChat(chat.id, newMessage.trim(), "", "");
+      await sendChat({
+        p_conversation_id: chat.id,
+        p_content: newMessage.trim(),
+        p_message_type: newFile ? "image" : "text",
+        p_file_path: newFile?.path,
+        p_file_name: newFile?.fullPath.split("/").pop(),
+      });
     } catch (error) {
+      imageLoader && setImageLoader(false);
       console.log("Failed to send message", JSON.stringify(error, null, 2));
       // Remove the temporary message if sending failed
       setMessages((prev) => prev.filter((msg) => msg.id !== tempMessage.id));
       setNewMessage(newMessage.trim()); // Restore the message in the input
     }
-  }, [chat.id, newMessage, currentUser?.id, coach.id]);
+  }, [chat.id, newMessage, currentUser?.id, coach.id, image, imageLoader]);
 
   const pickImage = async () => {
     // No permissions request is necessary for launching the image library
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images", "videos"],
+      mediaTypes: ["images"],
       allowsEditing: true,
-      aspect: [4, 3],
+      // aspect: [4, 3],
       quality: 1,
     });
-
-    console.log(result);
 
     if (!result.canceled) {
       setImage(result.assets[0].uri);
     }
   };
 
-  const handleImagePress = async () => {
-    await pickImage();
+  const pickCamera = async () => {
+    setTimeout(() => {
+      setIsImagePickerModalVisible(false);
+    }, 500);
+    // No permissions request is necessary for launching the image library
+    let result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      // aspect: [4, 3],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
+
+  const handleAttachementPress = async () => {
+    // await pickImage();
+    setIsImagePickerModalVisible(true);
   };
 
   async function startRecording() {
@@ -222,39 +274,20 @@ const CoachChat: React.FC = () => {
       : undefined;
   }, [sound]);
 
-  const renderMessageItem = ({ item }: { item: any }) => {
-    const isCoach = item.sender_id === coach.id;
-    return isCoach ? (
-      <View style={styles.messageRow}>
-        <Image
-          source={
-            coach.profile_image_url
-              ? { uri: coach.profile_image_url }
-              : defaultAvatar
-          }
-          style={[styles.avatar, { marginRight: 10 }]}
-        />
-        <View style={{ flex: 1 }}>
-          <View style={[styles.bubble, styles.coachBubble]}>
-            <Text style={styles.bubbleText}>{item.content}</Text>
-          </View>
-          <Text style={styles.timeText}>
-            {new Date(item.created_at).toLocaleTimeString()}
-          </Text>
-        </View>
-      </View>
-    ) : (
-      <View style={styles.userMessageRow}>
-        <View style={{ flex: 1, alignItems: "flex-end" }}>
-          <View style={[styles.bubble, styles.userBubble]}>
-            <Text style={styles.bubbleTextUser}>{item.content}</Text>
-          </View>
-          <Text style={styles.timeText}>
-            {new Date(item.created_at).toLocaleTimeString()}
-          </Text>
-        </View>
-      </View>
-    );
+  const sendImage = async () => {
+    console.log("sending image");
+    setImageLoader(true);
+    setImage(null);
+    const fileName = Date.now() + `_` + image?.split("/").pop();
+    const { data, error } = await uploadFile(image!, chat.id, fileName);
+    if (data) {
+      return { file: data, error: null };
+    }
+    return { file: null, error: true };
+  };
+
+  const renderMessageItem = ({ item }: { item: Tables<"messages"> }) => {
+    return <MessageBubble item={item} />;
   };
 
   const renderFooter = () => {
@@ -351,7 +384,7 @@ const CoachChat: React.FC = () => {
         )}
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <TouchableOpacity onPress={handleImagePress}>
+          <TouchableOpacity onPress={handleAttachementPress}>
             <Icon name="plus" size={20} color="#64748b" />
           </TouchableOpacity>
           <View style={styles.inputWrapper}>
@@ -364,9 +397,13 @@ const CoachChat: React.FC = () => {
               onSubmitEditing={sendMessage}
             />
           </View>
-          <TouchableOpacity onPress={sendMessage}>
-            <Icon name="paper-plane" size={20} color="#10b981" />
-          </TouchableOpacity>
+          {imageLoader ? (
+            <ActivityIndicator color={"#10b981"} />
+          ) : (
+            <TouchableOpacity onPress={() => sendMessage()}>
+              <Icon name="paper-plane" size={20} color="#10b981" />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={() => {
               if (recording) {
@@ -380,6 +417,18 @@ const CoachChat: React.FC = () => {
           </TouchableOpacity>
         </View>
       </View>
+      <ImagePickerModal
+        isVisible={isImagePickerModalVisible}
+        onClose={() => setIsImagePickerModalVisible(false)}
+        onCameraPress={() => {
+          pickCamera();
+          setIsImagePickerModalVisible(false);
+        }}
+        onImagePress={() => {
+          pickImage();
+          setIsImagePickerModalVisible(false);
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -408,24 +457,7 @@ const styles = StyleSheet.create({
   coachBubble: {
     backgroundColor: "#3b82f6",
   },
-  userBubble: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  bubbleText: {
-    color: "#fff",
-    fontSize: 15,
-  },
-  bubbleTextUser: {
-    color: "#1f2937",
-    fontSize: 15,
-  },
-  timeText: {
-    color: "#64748b",
-    fontSize: 12,
-    marginTop: 2,
-  },
+
   messageRow: {
     flexDirection: "row",
     alignItems: "flex-start",

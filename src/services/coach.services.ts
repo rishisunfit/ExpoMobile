@@ -1,4 +1,8 @@
+import { decode } from "base64-arraybuffer";
+import * as FileSystem from "expo-file-system";
 import { supabase } from "../../lib/supabase";
+import { BUCKET_NAMES } from "../types/enums";
+
 export const getCoach = async (userId: string) => {
   const { data, error } = await supabase
     .from("direct_conversations")
@@ -35,17 +39,16 @@ export const getCoach = async (userId: string) => {
   return conversationsWithOtherUser;
 };
 
-export const sendChat = async (
-  conversationId: string,
-  message: string,
-  file_path: string,
-  file_name: string
-) => {
-  const { data, error } = await supabase.rpc("send_message", {
-    p_conversation_id: conversationId,
-    p_content: message,
-    p_message_type: "text",
-  });
+export const sendChat = async (values: {
+  p_conversation_id: string;
+  p_content: string;
+  p_message_type?: "file" | "image" | "text" | "voice";
+  p_file_path?: string;
+  p_file_name?: string;
+}) => {
+  console.log("values", JSON.stringify(values, null, 2));
+
+  const { data, error } = await supabase.rpc("send_message", values);
   if (error) {
     throw error;
   }
@@ -78,4 +81,69 @@ export const getAllMessages = async (
     messages: data || [],
     hasMore: count ? count > (data?.length || 0) : false,
   };
+};
+
+export const uploadFile = async (
+  file: string,
+  converstionId: string,
+  fileName: string
+) => {
+  try {
+    // Step 1: Read the file as base64
+    const base64 = await FileSystem.readAsStringAsync(file, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    // Step 2: Convert base64 to ArrayBuffer
+    const arrayBuffer = decode(base64);
+
+    const filePath = `${converstionId}/${fileName}`;
+
+    const contentType = `image/${fileName.split(".").pop()}`;
+
+    const { data, error } = await supabase.storage
+      .from("conversation-images")
+      .upload(filePath, arrayBuffer, {
+        upsert: false,
+        cacheControl: "3600",
+        contentType,
+      });
+
+    if (error) {
+      console.log("error", JSON.stringify(error, null, 2));
+      return { data: null, error: error.message };
+    }
+    console.log("image Data", JSON.stringify(data, null, 2));
+    return { data: data, error: null };
+  } catch (error) {
+    if (error instanceof Error) {
+      console.log("error", error.message);
+      return { data: null, error: error.message };
+    }
+    return { data: null, error: "Something went wrong" };
+  }
+};
+
+export const getSignedUrl = async (filePath: string, messageType: string) => {
+  try {
+    let bucketName: BUCKET_NAMES;
+    if (messageType === "voice") {
+      bucketName = BUCKET_NAMES.CONVERSATION_VOICE;
+    } else if (messageType === "image") {
+      bucketName = BUCKET_NAMES.CONVERSATION_IMAGES;
+    } else if (messageType === "file") {
+      bucketName = BUCKET_NAMES.CONVERSATION_FILES;
+    } else {
+      bucketName = BUCKET_NAMES.CONVERSATION_FILES;
+    }
+
+    const { data, error } = await supabase.storage
+      .from(bucketName)
+      .createSignedUrl(filePath, 60);
+    if (error) {
+      throw error;
+    }
+    // console.log("signedUrl", data);
+    return data;
+  } catch (error) {}
 };
