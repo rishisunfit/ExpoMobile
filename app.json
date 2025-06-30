@@ -13,14 +13,23 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to let you take photos.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library.",
+        "NSMicrophoneUsageDescription": "This app uses the microphone for voice messages.",
+        "NSFileProviderDomainUsageDescription": "This app needs access to your files."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -29,9 +38,23 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app needs access to your photos to let you share them with your friends."
+          "photosPermission": "The app accesses your photos.",
+          "cameraPermission": "The app accesses your camera.",
+          "microphonePermission": "The app accesses your microphone."
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "filePermission": "The app needs access to your files."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "05b0c744-f0d3-461e-9829-38f90dddfdcd"
+      }
+    },
+    "owner": "salmanshk90"
   }
 }

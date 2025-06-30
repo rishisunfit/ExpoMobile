@@ -5,8 +5,11 @@ import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
@@ -14,8 +17,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import Icon from "react-native-vector-icons/FontAwesome6";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { FontAwesome6 } from "@expo/vector-icons";
 import { supabase } from "../../../lib/supabase";
 import { defaultAvatar } from "../../assets";
 import { getUser } from "../../services/auth.services";
@@ -28,7 +34,8 @@ import { Tables } from "../../types/database";
 import { Conversation, User } from "../../types/types";
 import ImagePickerModal from "../modal/ImagePickerModal";
 import MessageBubble from "./MessageBubble";
-
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
 const CoachChat: React.FC = () => {
   const route =
     useRoute<RouteProp<{ params: { item: User; data: Conversation[] } }>>();
@@ -53,8 +60,16 @@ const CoachChat: React.FC = () => {
   const [imageLoader, setImageLoader] = useState<boolean>(false);
   const [isImagePickerModalVisible, setIsImagePickerModalVisible] =
     useState<boolean>(false);
-
+  const [recordingDuration, setRecordingDuration] = useState<number>(0);
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const recordingInterval = useRef<NodeJS.Timeout | null>(null);
+  const [previewDuration, setPreviewDuration] = useState<number>(0);
+  const [previewPosition, setPreviewPosition] = useState<number>(0);
+  const previewInterval = useRef<NodeJS.Timeout | null>(null);
+  const [file, setFile] = useState<any>(null);
+  const { top } = useSafeAreaInsets();
   // Fetch initial messages and user
+
   useEffect(() => {
     const init = async () => {
       try {
@@ -93,7 +108,6 @@ const CoachChat: React.FC = () => {
         },
         (payload) => {
           const message = payload.new;
-          console.log("message", JSON.stringify(message, null, 2));
           // Show only messages between this user and this coach
           if (
             message.sender_id === currentUser?.id ||
@@ -103,18 +117,12 @@ const CoachChat: React.FC = () => {
           }
         }
       )
-      .subscribe(() => {
-        console.log("channel subscribed");
-      });
+      .subscribe(() => {});
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, []);
-
-  useEffect(() => {
-    console.log("message", JSON.stringify(messages, null, 2));
-  }, [messages]);
 
   const fetchMoreMessages = async () => {
     if (!hasMore || isLoadingMore || !lastMessageTimestamp) return;
@@ -140,14 +148,49 @@ const CoachChat: React.FC = () => {
     }
   };
 
-  const sendMessage = useCallback(async () => {
+  const sendFile = async (file: any) => {
     let newFile;
-    if (image?.length) {
+    if (file.assets[0].uri?.length) {
+      const { data: fileData, error } = await uploadFile(
+        file.assets[0].uri,
+        chat.id,
+        file.assets[0].name.split(".")[0] +
+          "-" +
+          Date.now().toString() +
+          Math.random().toString(36).substring(2, 15) +
+          "." +
+          file.assets[0].name.split(".")[1]
+      );
+      if (fileData) {
+        newFile = fileData;
+      }
+    }
+    return newFile;
+  };
+
+  const sendMessage = useCallback(async () => {
+    setImageLoader(true);
+    let newFile;
+    if (newMessage.trim().length === 0 && !image && !file && !recordingUri) {
+      return;
+    }
+    if (recordingUri && recordingUri?.length) {
+      const fileName = `voice_${Date.now()}.m4a`;
+      const { data, error } = await uploadFile(recordingUri, chat.id, fileName);
+      newFile = data;
+    }
+    if (image && image?.length) {
       const { file, error } = await sendImage();
       if (file) {
         newFile = file;
       }
       setImageLoader(false);
+    } else if (file && file.assets[0].uri?.length) {
+      const fileData = await sendFile(file);
+      if (fileData) {
+        newFile = fileData;
+      }
+      setFile(null);
     }
 
     const tempMessage: Tables<"messages"> & {
@@ -159,39 +202,70 @@ const CoachChat: React.FC = () => {
       receiver_id: coach.id,
       created_at: new Date().toISOString(),
       conversation_id: chat.id,
-      file_path: newFile?.path! ?? null,
+      file_path: newFile?.path ?? null,
       file_name: newFile?.fullPath.split("/").pop() ?? null,
-      message_type: newFile ? "image" : "text",
+      message_type: recordingUri
+        ? "voice"
+        : file
+        ? "file"
+        : image
+        ? "image"
+        : "text",
     };
-
-    setNewMessage(""); // Clear input immediately
     setMessages((prev) => [tempMessage, ...prev]); // Optimistic update
-
+    setNewMessage(""); // Clear input immediately
+    setRecordingUri(null);
+    setFile(null);
+    setImage(null);
+    setImageLoader(false);
+    setRecording(null);
     try {
       await sendChat({
         p_conversation_id: chat.id,
         p_content: newMessage.trim(),
-        p_message_type: newFile ? "image" : "text",
+        p_message_type: recordingUri
+          ? "voice"
+          : file
+          ? "file"
+          : image
+          ? "image"
+          : "text",
         p_file_path: newFile?.path,
         p_file_name: newFile?.fullPath.split("/").pop(),
       });
     } catch (error) {
       imageLoader && setImageLoader(false);
-      console.log("Failed to send message", JSON.stringify(error, null, 2));
       // Remove the temporary message if sending failed
       setMessages((prev) => prev.filter((msg) => msg.id !== tempMessage.id));
       setNewMessage(newMessage.trim()); // Restore the message in the input
+    } finally {
+      setImageLoader(false);
     }
-  }, [chat.id, newMessage, currentUser?.id, coach.id, image, imageLoader]);
+  }, [
+    chat.id,
+    newMessage,
+    currentUser?.id,
+    coach.id,
+    image,
+    imageLoader,
+    file,
+    recordingUri,
+  ]);
 
   const pickImage = async () => {
     // No permissions request is necessary for launching the image library
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission required", "Please allow photo access");
+      return;
+    }
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: true,
       // aspect: [4, 3],
       quality: 1,
     });
+    console.log("result", JSON.stringify(result, null, 2));
 
     if (!result.canceled) {
       setImage(result.assets[0].uri);
@@ -203,6 +277,11 @@ const CoachChat: React.FC = () => {
       setIsImagePickerModalVisible(false);
     }, 500);
     // No permissions request is necessary for launching the image library
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission required", "Please allow camera access");
+      return;
+    }
     let result = await ImagePicker.launchCameraAsync({
       mediaTypes: ["images"],
       allowsEditing: true,
@@ -215,10 +294,60 @@ const CoachChat: React.FC = () => {
     }
   };
 
+  const pickFile = async () => {
+    try {
+    
+      let result = await DocumentPicker.getDocumentAsync();
+      if (result) {
+        console.log("result", JSON.stringify(result, null, 2));
+        setImage(null);
+        setFile(result);
+      }
+    } catch (error) {
+      console.log("error", JSON.stringify(error, null, 2));
+    }
+  };
+
   const handleAttachementPress = async () => {
     // await pickImage();
     setIsImagePickerModalVisible(true);
   };
+
+  // Initialize audio session
+  useEffect(() => {
+    const initAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (error) {
+        console.error("Error setting audio mode:", error);
+      }
+    };
+    initAudio();
+  }, []);
+
+  // Cleanup recording interval
+  useEffect(() => {
+    return () => {
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
+      }
+    };
+  }, []);
+
+  // Cleanup sound on unmount
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
 
   async function startRecording() {
     try {
@@ -226,9 +355,13 @@ const CoachChat: React.FC = () => {
         await requestPermission();
       }
 
+      // Set audio mode for recording
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
       });
 
       const { recording } = await Audio.Recording.createAsync(
@@ -236,7 +369,13 @@ const CoachChat: React.FC = () => {
       );
 
       setRecording(recording);
-      setRecordingUri(null); // clear previous recording
+      setRecordingUri(null);
+      setRecordingDuration(0);
+
+      // Start duration counter
+      recordingInterval.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1000);
+      }, 1000);
     } catch (err) {
       console.error("Failed to start recording", err);
     }
@@ -244,38 +383,188 @@ const CoachChat: React.FC = () => {
 
   async function stopRecording() {
     try {
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
+      }
+
       await recording?.stopAndUnloadAsync();
       const uri = recording?.getURI();
       setRecording(null);
       setRecordingUri(uri || null);
+
+      // Set audio mode back to playback
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
       });
     } catch (err) {
       console.error("Failed to stop recording", err);
     }
   }
+
+  // Update preview position during playback
+  useEffect(() => {
+    if (sound && isPlayingPreview) {
+      previewInterval.current = setInterval(async () => {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded) {
+          setPreviewPosition(status.positionMillis);
+          if (status.didJustFinish) {
+            setIsPlayingPreview(false);
+            setPreviewPosition(0);
+            clearInterval(previewInterval.current!);
+          }
+        }
+      }, 100);
+
+      return () => {
+        if (previewInterval.current) {
+          clearInterval(previewInterval.current);
+        }
+      };
+    }
+  }, [sound, isPlayingPreview]);
+
   const playRecording = async () => {
     if (!recordingUri) return;
     try {
-      const { sound } = await Audio.Sound.createAsync({ uri: recordingUri });
-      setSound(sound);
-      await sound.playAsync();
+      // Ensure audio mode is set for playback
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+
+      if (sound) {
+        if (isPlayingPreview) {
+          await sound.pauseAsync();
+          setIsPlayingPreview(false);
+          if (previewInterval.current) {
+            clearInterval(previewInterval.current);
+          }
+        } else {
+          const status = await sound.getStatusAsync();
+          if (status.isLoaded) {
+            if (status.positionMillis === status.durationMillis) {
+              await sound.setPositionAsync(0);
+              setPreviewPosition(0);
+            }
+            await sound.playAsync();
+            setIsPlayingPreview(true);
+          }
+        }
+      } else {
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          { uri: recordingUri },
+          {
+            shouldPlay: true,
+            progressUpdateIntervalMillis: 100,
+            positionMillis: 0,
+            volume: 1.0,
+            rate: 1.0,
+            shouldCorrectPitch: true,
+          },
+          (status) => {
+            if (status.isLoaded) {
+              if (!status.isPlaying) {
+                setIsPlayingPreview(false);
+                if (previewInterval.current) {
+                  clearInterval(previewInterval.current);
+                }
+              }
+            }
+          }
+        );
+        const status = await newSound.getStatusAsync();
+        if (status.isLoaded) {
+          setPreviewDuration(status.durationMillis || 0);
+        }
+        setSound(newSound);
+        setIsPlayingPreview(true);
+      }
     } catch (err) {
       console.error("Failed to play recording", err);
     }
   };
 
-  useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
+  const sendVoiceMessage = async () => {
+    if (!recordingUri) return;
+
+    try {
+      setIsLoading(true);
+      const fileName = `voice_${Date.now()}.m4a`;
+      const { data, error } = await uploadFile(recordingUri, chat.id, fileName);
+
+      if (error || !data) {
+        throw new Error("Failed to upload voice message");
+      }
+
+      const tempMessage = {
+        id: Date.now().toString(),
+        content: "",
+        sender_id: currentUser?.id,
+        receiver_id: coach.id,
+        created_at: new Date().toISOString(),
+        conversation_id: chat.id,
+        file_path: data.path,
+        file_name: fileName,
+        message_type: "voice" as const,
+      };
+
+      // Cleanup audio before sending
+      if (sound) {
+        await sound.unloadAsync();
+        setSound(null);
+      }
+      setIsPlayingPreview(false);
+      setPreviewPosition(0);
+      setPreviewDuration(0);
+      if (previewInterval.current) {
+        clearInterval(previewInterval.current);
+      }
+
+      setMessages((prev) => [tempMessage, ...prev]); // Optimistic update
+
+      await sendChat({
+        p_conversation_id: chat.id,
+        p_content: "",
+        p_message_type: "voice",
+        p_file_path: data.path,
+        p_file_name: fileName,
+      });
+
+      // Reset recording states
+      setRecordingUri(null);
+      setRecordingDuration(0);
+
+      // Set audio mode back to default
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+    } catch (error) {
+      console.error("Failed to send voice message:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const formatTime = (milliseconds: number) => {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
 
   const sendImage = async () => {
-    console.log("sending image");
     setImageLoader(true);
     setImage(null);
     const fileName = Date.now() + `_` + image?.split("/").pop();
@@ -315,7 +604,7 @@ const CoachChat: React.FC = () => {
         renderItem={renderMessageItem}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={{ padding: 24, gap: 16 }}
-        inverted
+        inverted={messages.length > 0}
         showsVerticalScrollIndicator={false}
         onEndReached={fetchMoreMessages}
         onEndReachedThreshold={0.5}
@@ -326,109 +615,211 @@ const CoachChat: React.FC = () => {
   };
 
   return (
-    <SafeAreaView edges={["top"]} style={{ flex: 1 }}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <AntDesign name="arrowleft" size={24} color="black" />
-        </TouchableOpacity>
-        <Image
-          source={
-            coach.profile_image_url
-              ? { uri: coach.profile_image_url }
-              : defaultAvatar
-          }
-          style={styles.avatar}
-          resizeMode="cover"
-        />
-        <Text>{coach.full_name}</Text>
-      </View>
-      {isLoading ? (
-        <ActivityIndicator size="large" color="#0000ff" style={{ flex: 1 }} />
-      ) : (
-        renderChatContainer()
-      )}
-      <View style={styles.messageInputBar}>
-        {image && (
-          <View>
-            <Image source={{ uri: image }} style={styles.imageContainer} />
-            <TouchableOpacity
-              onPress={() => setImage(null)}
-              style={styles.imageCloseButton}
-            >
-              <Icon name="xmark" size={10} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        )}
-        {recording && (
-          <View style={styles.recordingIndicator}>
-            <Text style={styles.recordingText}>Recording...</Text>
-            <TouchableOpacity onPress={stopRecording} style={styles.stopButton}>
-              <Icon name="stop" size={12} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {recordingUri && (
-          <View style={styles.audioPreview}>
-            <TouchableOpacity onPress={playRecording} style={styles.playButton}>
-              <Icon name="play" size={14} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.audioLabel}>Recorded Audio</Text>
-            <TouchableOpacity
-              onPress={() => setRecordingUri(null)}
-              style={styles.closeAudio}
-            >
-              <Icon name="xmark" size={12} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <TouchableOpacity onPress={handleAttachementPress}>
-            <Icon name="plus" size={20} color="#64748b" />
+    <SafeAreaView edges={["top", "bottom"]} style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : -top + 35}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <AntDesign name="arrowleft" size={24} color="black" />
           </TouchableOpacity>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.input}
-              placeholder="Type a message..."
-              placeholderTextColor="#64748b"
-              value={newMessage}
-              onChangeText={setNewMessage}
-              onSubmitEditing={sendMessage}
-            />
-          </View>
-          {imageLoader ? (
-            <ActivityIndicator color={"#10b981"} />
-          ) : (
-            <TouchableOpacity onPress={() => sendMessage()}>
-              <Icon name="paper-plane" size={20} color="#10b981" />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={() => {
-              if (recording) {
-                stopRecording();
-              } else {
-                startRecording();
-              }
-            }}
-          >
-            <Icon name="microphone" size={20} color="#64748b" />
-          </TouchableOpacity>
+          <Image
+            source={
+              coach.profile_image_url
+                ? { uri: coach.profile_image_url }
+                : defaultAvatar
+            }
+            style={styles.avatar}
+            resizeMode="cover"
+          />
+          <Text>{coach.full_name}</Text>
         </View>
-      </View>
-      <ImagePickerModal
-        isVisible={isImagePickerModalVisible}
-        onClose={() => setIsImagePickerModalVisible(false)}
-        onCameraPress={() => {
-          pickCamera();
-          setIsImagePickerModalVisible(false);
-        }}
-        onImagePress={() => {
-          pickImage();
-          setIsImagePickerModalVisible(false);
-        }}
-      />
+        {isLoading ? (
+          <ActivityIndicator size="large" color="#0000ff" style={{ flex: 1 }} />
+        ) : (
+          renderChatContainer()
+        )}
+        <View style={[styles.messageInputBar]}>
+          {file && (
+            <View style={styles.fileContainer}>
+              <FontAwesome6 name="file" size={12} color="#000" />
+              <Text style={{ flex: 1, fontSize: 14, color: "#000" }}>
+                {file.assets[0].name}
+              </Text>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#10b981",
+                  padding: 10,
+                  borderRadius: 100,
+                }}
+                onPress={() => setFile(null)}
+              >
+                <FontAwesome6 name="xmark" size={10} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {image && (
+            <View>
+              <Image source={{ uri: image }} style={styles.imageContainer} />
+              <TouchableOpacity
+                onPress={() => setImage(null)}
+                style={styles.imageCloseButton}
+              >
+                <FontAwesome6 name="xmark" size={10} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          )}
+          {recording && (
+            <View style={styles.recordingIndicator}>
+              <Text style={styles.recordingText}>
+                Recording... {formatTime(recordingDuration)}
+              </Text>
+              <TouchableOpacity
+                onPress={stopRecording}
+                style={styles.stopButton}
+              >
+                <FontAwesome6 name="stop" size={12} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {recordingUri && (
+            <View style={styles.audioPreview}>
+              <View style={styles.recordingContainer}>
+                <TouchableOpacity
+                  onPress={playRecording}
+                  style={{
+                    backgroundColor: "#fff",
+                    padding: 10,
+                    borderRadius: 100,
+                  }}
+                >
+                  <FontAwesome6
+                    name={isPlayingPreview ? "pause" : "play"}
+                    size={14}
+                    color="#10b981"
+                  />
+                </TouchableOpacity>
+                <View style={{ flex: 1, gap: 5 }}>
+                  <Text style={{ color: "#1f2937" }}>Preview Recording</Text>
+                  <View
+                    style={{
+                      height: 3,
+                      backgroundColor: "rgba(0,0,0,0.1)",
+                      borderRadius: 3,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: `${
+                          previewDuration > 0
+                            ? (previewPosition / previewDuration) * 100
+                            : 0
+                        }%`,
+                        height: "100%",
+                        backgroundColor: "#10b981",
+                        borderRadius: 3,
+                      }}
+                    />
+                  </View>
+                  <Text style={{ color: "#1f2937", fontSize: 12 }}>
+                    {formatTime(previewPosition)} /{" "}
+                    {formatTime(previewDuration)}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setRecordingUri(null);
+                    setFile(null);
+                    setImage(null);
+                    setImageLoader(false);
+                    setRecording(null);
+                    setPreviewPosition(0);
+                    setPreviewDuration(0);
+                    if (sound) {
+                      sound.unloadAsync();
+                      setSound(null);
+                    }
+                    setIsPlayingPreview(false);
+                    setPreviewPosition(0);
+                    setPreviewDuration(0);
+                    if (previewInterval.current) {
+                      clearInterval(previewInterval.current);
+                    }
+                  }}
+                  style={styles.closeAudio}
+                >
+                  <FontAwesome6 name="xmark" size={12} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <TouchableOpacity onPress={handleAttachementPress}>
+              <FontAwesome6 name="plus" size={20} color="#64748b" />
+            </TouchableOpacity>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="Type a message..."
+                placeholderTextColor="#64748b"
+                value={newMessage}
+                onChangeText={setNewMessage}
+                onSubmitEditing={sendMessage}
+              />
+            </View>
+            {imageLoader ? (
+              <ActivityIndicator color={"#10b981"} />
+            ) : (
+              <TouchableOpacity onPress={() => sendMessage()}>
+                <FontAwesome6 name="paper-plane" size={20} color="#10b981" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => {
+                setImage(null);
+                setFile(null);
+                setRecordingUri(null);
+                setRecordingDuration(0);
+                setPreviewPosition(0);
+                setPreviewDuration(0);
+                setIsPlayingPreview(false);
+                if (recording) {
+                  stopRecording();
+                } else {
+                  startRecording();
+                }
+              }}
+            >
+              <FontAwesome6
+                name={recording ? "stop" : "microphone"}
+                size={20}
+                color="#64748b"
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <ImagePickerModal
+          isVisible={isImagePickerModalVisible}
+          onClose={() => setIsImagePickerModalVisible(false)}
+          onCameraPress={() => {
+            pickCamera();
+            setIsImagePickerModalVisible(false);
+          }}
+          onImagePress={() => {
+            pickImage();
+            setIsImagePickerModalVisible(false);
+          }}
+          onFilePress={() => {
+            pickFile();
+            setIsImagePickerModalVisible(false);
+          }}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -476,7 +867,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "flex-start",
     gap: 12,
-    paddingBottom: 50,
   },
   inputWrapper: {
     flex: 1,
@@ -562,5 +952,29 @@ const styles = StyleSheet.create({
     backgroundColor: "#64748b",
     padding: 8,
     borderRadius: 100,
+  },
+  recordingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#f1f5f9",
+    padding: 10,
+    borderRadius: 10,
+  },
+  audioButtonContainer: {
+    backgroundColor: "#fff",
+    padding: 10,
+    borderRadius: 100,
+  },
+  fileContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    padding: 10,
+    borderRadius: 10,
+    width: "100%",
+    height: 50,
+    justifyContent: "space-between",
+    gap: 10,
   },
 });

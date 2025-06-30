@@ -98,11 +98,27 @@ export const uploadFile = async (
     const arrayBuffer = decode(base64);
 
     const filePath = `${converstionId}/${fileName}`;
+    console.log("filePath", filePath);
+    console.log("fileName", fileName);
+    const fileExtension = fileName.split(".").pop()?.toLowerCase();
 
-    const contentType = `image/${fileName.split(".").pop()}`;
+    // Determine bucket and content type based on file extension
+    let bucketName: BUCKET_NAMES;
+    let contentType: string;
+
+    if (fileExtension === "m4a" || fileExtension === "webm") {
+      bucketName = BUCKET_NAMES.CONVERSATION_VOICE;
+      contentType = `audio/${fileExtension}`;
+    } else if (["jpg", "jpeg", "png", "gif"].includes(fileExtension || "")) {
+      bucketName = BUCKET_NAMES.CONVERSATION_IMAGES;
+      contentType = `image/${fileExtension}`;
+    } else {
+      bucketName = BUCKET_NAMES.CONVERSATION_FILES;
+      contentType = "application/octet-stream";
+    }
 
     const { data, error } = await supabase.storage
-      .from("conversation-images")
+      .from(bucketName)
       .upload(filePath, arrayBuffer, {
         upsert: false,
         cacheControl: "3600",
@@ -113,7 +129,6 @@ export const uploadFile = async (
       console.log("error", JSON.stringify(error, null, 2));
       return { data: null, error: error.message };
     }
-    console.log("image Data", JSON.stringify(data, null, 2));
     return { data: data, error: null };
   } catch (error) {
     if (error instanceof Error) {

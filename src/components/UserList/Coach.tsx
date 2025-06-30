@@ -18,7 +18,6 @@ const Coach: React.FC = () => {
         const user = await getUser();
         userId = user.id;
         const coachData = await getCoach(userId);
-        console.log(JSON.stringify(coachData, null, 2));
         setCoach(coachData as unknown as Chat[]);
       } catch (error) {
         console.log("error fetching coaches:", error);

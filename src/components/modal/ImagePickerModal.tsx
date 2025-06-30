@@ -8,11 +8,13 @@ const ImagePickerModal = ({
   onClose,
   onCameraPress,
   onImagePress,
+  onFilePress,
 }: {
   isVisible: boolean;
   onClose: () => void;
   onCameraPress: () => void;
   onImagePress: () => void;
+  onFilePress: () => void;
 }) => {
   return (
     <Modal
@@ -37,6 +39,9 @@ const ImagePickerModal = ({
         </TouchableOpacity>
         <TouchableOpacity onPress={onImagePress}>
           <Icon name="image" size={80} color="#10b981" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onFilePress}>
+          <Icon name="file" size={80} color="#10b981" />
         </TouchableOpacity>
       </View>
     </Modal>
