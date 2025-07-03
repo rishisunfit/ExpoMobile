@@ -1,6 +1,6 @@
 import { AntDesign } from "@expo/vector-icons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import { Audio } from "expo-av";
+import { Audio, ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -67,6 +67,8 @@ const CoachChat: React.FC = () => {
   const [previewPosition, setPreviewPosition] = useState<number>(0);
   const previewInterval = useRef<NodeJS.Timeout | null>(null);
   const [file, setFile] = useState<any>(null);
+  const [video, setVideo] = useState<string | null>(null);
+  const [videoLoading, setVideoLoading] = useState<boolean>(false);
   const { top } = useSafeAreaInsets();
   // Fetch initial messages and user
 
@@ -171,8 +173,20 @@ const CoachChat: React.FC = () => {
   const sendMessage = useCallback(async () => {
     setImageLoader(true);
     let newFile;
-    if (newMessage.trim().length === 0 && !image && !file && !recordingUri) {
+    if (
+      newMessage.trim().length === 0 &&
+      !image &&
+      !file &&
+      !recordingUri &&
+      !video
+    ) {
       return;
+    }
+    if (video) {
+      console.log("video", video);
+      const fileName = `video_${Date.now()}.mp4`;
+      const { data, error } = await uploadFile(video, chat.id, fileName);
+      newFile = data;
     }
     if (recordingUri && recordingUri?.length) {
       const fileName = `voice_${Date.now()}.m4a`;
@@ -210,6 +224,8 @@ const CoachChat: React.FC = () => {
         ? "file"
         : image
         ? "image"
+        : video
+        ? "video"
         : "text",
     };
     setMessages((prev) => [tempMessage, ...prev]); // Optimistic update
@@ -219,6 +235,7 @@ const CoachChat: React.FC = () => {
     setImage(null);
     setImageLoader(false);
     setRecording(null);
+    setVideo(null);
     try {
       await sendChat({
         p_conversation_id: chat.id,
@@ -229,6 +246,8 @@ const CoachChat: React.FC = () => {
           ? "file"
           : image
           ? "image"
+          : video
+          ? "video"
           : "text",
         p_file_path: newFile?.path,
         p_file_name: newFile?.fullPath.split("/").pop(),
@@ -250,6 +269,7 @@ const CoachChat: React.FC = () => {
     imageLoader,
     file,
     recordingUri,
+    video,
   ]);
 
   const pickImage = async () => {
@@ -265,8 +285,6 @@ const CoachChat: React.FC = () => {
       // aspect: [4, 3],
       quality: 1,
     });
-    console.log("result", JSON.stringify(result, null, 2));
-
     if (!result.canceled) {
       setImage(result.assets[0].uri);
     }
@@ -296,10 +314,8 @@ const CoachChat: React.FC = () => {
 
   const pickFile = async () => {
     try {
-    
       let result = await DocumentPicker.getDocumentAsync();
       if (result) {
-        console.log("result", JSON.stringify(result, null, 2));
         setImage(null);
         setFile(result);
       }
@@ -492,68 +508,25 @@ const CoachChat: React.FC = () => {
     }
   };
 
-  const sendVoiceMessage = async () => {
-    if (!recordingUri) return;
-
+  const pickVideo = async () => {
+    setVideo(null);
+    setVideoLoading(false);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission required", "Please allow photo access");
+      return;
+    }
     try {
-      setIsLoading(true);
-      const fileName = `voice_${Date.now()}.m4a`;
-      const { data, error } = await uploadFile(recordingUri, chat.id, fileName);
-
-      if (error || !data) {
-        throw new Error("Failed to upload voice message");
-      }
-
-      const tempMessage = {
-        id: Date.now().toString(),
-        content: "",
-        sender_id: currentUser?.id,
-        receiver_id: coach.id,
-        created_at: new Date().toISOString(),
-        conversation_id: chat.id,
-        file_path: data.path,
-        file_name: fileName,
-        message_type: "voice" as const,
-      };
-
-      // Cleanup audio before sending
-      if (sound) {
-        await sound.unloadAsync();
-        setSound(null);
-      }
-      setIsPlayingPreview(false);
-      setPreviewPosition(0);
-      setPreviewDuration(0);
-      if (previewInterval.current) {
-        clearInterval(previewInterval.current);
-      }
-
-      setMessages((prev) => [tempMessage, ...prev]); // Optimistic update
-
-      await sendChat({
-        p_conversation_id: chat.id,
-        p_content: "",
-        p_message_type: "voice",
-        p_file_path: data.path,
-        p_file_name: fileName,
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        allowsEditing: true,
+        quality: 1,
       });
-
-      // Reset recording states
-      setRecordingUri(null);
-      setRecordingDuration(0);
-
-      // Set audio mode back to default
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
+      if (!result.canceled) {
+        setVideo(result.assets[0].uri);
+      }
     } catch (error) {
-      console.error("Failed to send voice message:", error);
-    } finally {
-      setIsLoading(false);
+      console.error("Failed to pick video", error);
     }
   };
 
@@ -666,6 +639,30 @@ const CoachChat: React.FC = () => {
               <Image source={{ uri: image }} style={styles.imageContainer} />
               <TouchableOpacity
                 onPress={() => setImage(null)}
+                style={styles.imageCloseButton}
+              >
+                <FontAwesome6 name="xmark" size={10} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          )}
+          {video && (
+            <View>
+              <Video
+                source={{ uri: video }}
+                style={{ width: 100, height: 100, borderRadius: 10 }}
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay={false}
+                useNativeControls
+                isLooping
+                onLoadStart={() => setVideoLoading(true)}
+                onLoad={() => setVideoLoading(false)}
+                onError={(error) => {
+                  console.error("Video load error:", error);
+                  setVideoLoading(false);
+                }}
+              />
+              <TouchableOpacity
+                onPress={() => setVideo(null)}
                 style={styles.imageCloseButton}
               >
                 <FontAwesome6 name="xmark" size={10} color="#fff" />
@@ -788,6 +785,7 @@ const CoachChat: React.FC = () => {
                 setPreviewPosition(0);
                 setPreviewDuration(0);
                 setIsPlayingPreview(false);
+                setVideo(null);
                 if (recording) {
                   stopRecording();
                 } else {
@@ -816,6 +814,10 @@ const CoachChat: React.FC = () => {
           }}
           onFilePress={() => {
             pickFile();
+            setIsImagePickerModalVisible(false);
+          }}
+          onVideoPress={() => {
+            pickVideo();
             setIsImagePickerModalVisible(false);
           }}
         />

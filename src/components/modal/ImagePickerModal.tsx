@@ -9,12 +9,14 @@ const ImagePickerModal = ({
   onCameraPress,
   onImagePress,
   onFilePress,
+  onVideoPress,
 }: {
   isVisible: boolean;
   onClose: () => void;
   onCameraPress: () => void;
   onImagePress: () => void;
   onFilePress: () => void;
+  onVideoPress: () => void;
 }) => {
   return (
     <Modal
@@ -35,13 +37,16 @@ const ImagePickerModal = ({
         }}
       >
         <TouchableOpacity onPress={onCameraPress}>
-          <Icon name="camera" size={80} color="#10b981" />
+          <Icon name="camera" size={50} color="#10b981" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onVideoPress}>
+          <Icon name="video" size={50} color="#10b981" />
         </TouchableOpacity>
         <TouchableOpacity onPress={onImagePress}>
-          <Icon name="image" size={80} color="#10b981" />
+          <Icon name="image" size={50} color="#10b981" />
         </TouchableOpacity>
         <TouchableOpacity onPress={onFilePress}>
-          <Icon name="file" size={80} color="#10b981" />
+          <Icon name="file" size={50} color="#10b981" />
         </TouchableOpacity>
       </View>
     </Modal>

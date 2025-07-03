@@ -49,12 +49,6 @@
           "filePermission": "The app needs access to your files."
         }
       ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "05b0c744-f0d3-461e-9829-38f90dddfdcd"
-      }
-    },
-    "owner": "salmanshk90"
+    ]
   }
 }

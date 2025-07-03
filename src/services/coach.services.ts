@@ -42,12 +42,10 @@ export const getCoach = async (userId: string) => {
 export const sendChat = async (values: {
   p_conversation_id: string;
   p_content: string;
-  p_message_type?: "file" | "image" | "text" | "voice";
+  p_message_type?: "file" | "image" | "text" | "voice" | "video";
   p_file_path?: string;
   p_file_name?: string;
 }) => {
-  console.log("values", JSON.stringify(values, null, 2));
-
   const { data, error } = await supabase.rpc("send_message", values);
   if (error) {
     throw error;
@@ -112,6 +110,9 @@ export const uploadFile = async (
     } else if (["jpg", "jpeg", "png", "gif"].includes(fileExtension || "")) {
       bucketName = BUCKET_NAMES.CONVERSATION_IMAGES;
       contentType = `image/${fileExtension}`;
+    } else if (fileExtension === "mp4") {
+      bucketName = BUCKET_NAMES.CONVERSATION_VIDEOS;
+      contentType = `video/${fileExtension}`;
     } else {
       bucketName = BUCKET_NAMES.CONVERSATION_FILES;
       contentType = "application/octet-stream";
@@ -148,6 +149,8 @@ export const getSignedUrl = async (filePath: string, messageType: string) => {
       bucketName = BUCKET_NAMES.CONVERSATION_IMAGES;
     } else if (messageType === "file") {
       bucketName = BUCKET_NAMES.CONVERSATION_FILES;
+    } else if (messageType === "video") {
+      bucketName = BUCKET_NAMES.CONVERSATION_VIDEOS;
     } else {
       bucketName = BUCKET_NAMES.CONVERSATION_FILES;
     }

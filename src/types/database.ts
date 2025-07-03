@@ -803,7 +803,7 @@ export type Database = {
       }
     }
     Enums: {
-      message_type: "text" | "image" | "file" | "voice"
+      message_type: "text" | "image" | "file" | "voice" | "video"
       role_type: "Client" | "Coach"
     }
     CompositeTypes: {
@@ -920,7 +920,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      message_type: ["text", "image", "file", "voice"],
+      message_type: ["text", "image", "file", "voice", "video"],
       role_type: ["Client", "Coach"],
     },
   },

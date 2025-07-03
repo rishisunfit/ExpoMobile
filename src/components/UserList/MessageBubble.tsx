@@ -14,7 +14,7 @@ import { getSignedUrl } from "../../services/coach.services";
 import { Tables } from "../../types/database";
 import { Conversation, User } from "../../types/types";
 import { FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Audio } from "expo-av";
+import { Audio, ResizeMode, Video } from "expo-av";
 import { downloadAndSharePdf } from "../../utils";
 const MessageBubble = ({ item }: { item: Tables<"messages"> }) => {
   const route =
@@ -23,6 +23,7 @@ const MessageBubble = ({ item }: { item: Tables<"messages"> }) => {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [imageLoader, setImageLoader] = useState<boolean>(false);
+  const [videoLoading, setVideoLoading] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -63,11 +64,15 @@ const MessageBubble = ({ item }: { item: Tables<"messages"> }) => {
     if (
       item.message_type === "image" ||
       item.message_type === "file" ||
-      item.message_type === "voice"
+      item.message_type === "voice" ||
+      item.message_type === "video"
     ) {
       setLoading(true);
       getSignedUrl(item.file_path!, item.message_type)
         .then(async (data) => {
+          if (item.message_type === "video") {
+            console.log(JSON.stringify(data, null, 2));
+          }
           setSignedUrl(data?.signedUrl || null);
           // Pre-load sound to get duration for voice messages
           if (item.message_type === "voice" && data?.signedUrl) {
@@ -204,6 +209,44 @@ const MessageBubble = ({ item }: { item: Tables<"messages"> }) => {
             )}
           </View>
         </>
+      );
+    } else if (item.message_type === "video") {
+      return (
+        <View
+          style={{
+            gap: 10,
+            position: "relative",
+          }}
+        >
+          <Video
+            source={{ uri: signedUrl! }}
+            shouldPlay={false}
+            resizeMode={ResizeMode.CONTAIN}
+            style={{
+              width: !isCoach ? 250 : "100%",
+              height: 250,
+              borderRadius: 10,
+              alignSelf: "center",
+            }}
+            useNativeControls
+            isLooping
+          />
+          {loading && (
+            <ActivityIndicator
+              style={{
+                position: "absolute",
+                top: 100,
+                left: 85,
+              }}
+              color={!isCoach ? "#fff" : "#10b981"}
+            />
+          )}
+          {item.content.length > 0 && (
+            <Text style={{ color: !isCoach ? "#fff" : "#1f2937" }}>
+              {item.content}
+            </Text>
+          )}
+        </View>
       );
     } else if (item.message_type === "voice") {
       return (
