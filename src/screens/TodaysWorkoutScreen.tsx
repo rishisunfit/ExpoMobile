@@ -11,16 +11,15 @@ const { width } = Dimensions.get('window');
 
 export default function TodaysWorkoutScreen({ navigation }: any) {
   const [workoutName, setWorkoutName] = useState('Loading...');
-  const [workoutId, setWorkoutId] = useState(null);
+  const [workoutId, setWorkoutId] = useState<string | null>(null);
   const [exercises, setExercises] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [programId, setProgramId] = useState(null);
-  const [targetDay, setTargetDay] = useState(null);
+  const [programId, setProgramId] = useState<string | null>(null);
+  const [targetDay, setTargetDay] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchTodaysWorkout = async () => {
       try {
-        console.log('🚀 Fetching today\'s workout...');
         
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         
@@ -52,8 +51,8 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
           const currentDay = dayInfo.day;
           const currentProgramId = dayInfo.program_id; // Assuming this field exists
           
-          setTargetDay(currentDay);
-          setProgramId(currentProgramId);
+          setTargetDay(currentDay as number);
+          setProgramId(currentProgramId as string);
 
           // Now, get the workout name and ID for the current day
           const { data: workoutData, error: workoutError } = await supabase.rpc('get_day_workouts', {
@@ -70,11 +69,11 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
           if (workoutData && workoutData.length > 0) {
             const workout = workoutData[0];
             setWorkoutName(workout.workout_name || 'Workout Not Found');
-            setWorkoutId(workout.workout_id); // Store the workout ID
+            setWorkoutId(workout.workout_id as string); // Store the workout ID
             
             // Now fetch the exercise details
             if (workout.workout_id) {
-              await fetchWorkoutExercises(workout.workout_id);
+              await fetchWorkoutExercises(workout.workout_id as string);
             }
           } else {
             setWorkoutName('No Workout Today');
@@ -88,80 +87,70 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
       }
     };
 
-    const fetchWorkoutExercises = async (workoutId) => {
+    const fetchWorkoutExercises = async (workoutId: string) => {
       try {
-        console.log('🏋️ Fetching exercises for workout:', workoutId);
-        
         const { data, error } = await supabase.rpc('get_workout_preview', {
           workout_uuid: workoutId,
         });
-
         if (error) {
           console.error("❌ Error fetching workout preview:", error);
           return;
         }
-
-        console.log("✅ Workout Preview Data:", data);
-        
-        // Transform the data into the format expected by the UI
-        const transformedExercises = transformExerciseData(data);
+        // Batch fetch images from exercise_library
+        const exerciseIds = Array.from(new Set(data.map((item: any) => item.exercise_id)));
+        let imageMap: Record<string, string> = {};
+        if (exerciseIds.length > 0) {
+          const { data: imageRows, error: imageError } = await supabase
+            .from('exercise_library')
+            .select('id, image')
+            .in('id', exerciseIds);
+          if (imageError) {
+            console.error('❌ Error fetching exercise images:', imageError);
+          } else if (imageRows) {
+            imageMap = imageRows.reduce((acc: Record<string, string>, row: any) => {
+              acc[row.id] = row.image;
+              return acc;
+            }, {});
+          }
+        }
+        // Transform the data into the format expected by the UI, passing the image map
+        const transformedExercises = transformExerciseData(data, imageMap);
         setExercises(transformedExercises);
-        
       } catch (err) {
         console.error('❌ Error fetching exercises:', err);
       }
     };
 
-    const transformExerciseData = (data) => {
+    // Accept imageMap as a parameter
+    const transformExerciseData = (data: any[], imageMap: Record<string, string> = {}) => {
       // Group exercises by exercise_name and aggregate sets/reps
       const exerciseMap = new Map();
-      
-      data.forEach(item => {
+      data.forEach((item: any) => {
         const key = item.exercise_name;
-        
         if (!exerciseMap.has(key)) {
           exerciseMap.set(key, {
             id: key,
             name: item.exercise_name,
             muscles: item.muscles_trained,
-            sets: 0,
-            reps: '',
-            image: 'https://storage.googleapis.com/uxpilot-auth.appspot.com/f92363f388-355f6895ba753eaa0ff5.png',
+            image: imageMap[item.exercise_id] || '', // Use fetched image or blank
             setDetails: [],
             blockType: item.block_type,
             orderIndex: item.order_index
           });
         }
-        
         const exercise = exerciseMap.get(key);
-        exercise.sets += 1;
         exercise.setDetails.push({
           setNumber: item.set_number,
           setType: item.set_type,
           reps: item.reps
         });
       });
-      
-      // Convert to array and format reps string
-      const exercisesArray = Array.from(exerciseMap.values()).map(exercise => {
-        const repsArray = exercise.setDetails.map(detail => detail.reps);
-        const uniqueReps = [...new Set(repsArray)];
-        const repsString = uniqueReps.length === 1 
-          ? `${uniqueReps[0]} reps`
-          : `${Math.min(...uniqueReps)}-${Math.max(...uniqueReps)} reps`;
-        
-        return {
-          ...exercise,
-          reps: repsString
-        };
-      });
-      
       // Sort by order_index to maintain proper sequence
+      const exercisesArray = Array.from(exerciseMap.values());
       exercisesArray.sort((a, b) => a.orderIndex - b.orderIndex);
-      
-      // Mark superset exercises
+      // Mark superset and circuit exercises as before
       const supersetGroups = new Map();
-      exercisesArray.forEach(exercise => {
+      exercisesArray.forEach((exercise: any) => {
         if (exercise.blockType === 'superset') {
           const key = `${exercise.blockType}_${exercise.orderIndex}`;
           if (!supersetGroups.has(key)) {
@@ -170,20 +159,16 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
           supersetGroups.get(key).push(exercise);
         }
       });
-      
-      // Mark exercises as part of superset
-      supersetGroups.forEach(group => {
+      supersetGroups.forEach((group: any[]) => {
         if (group.length >= 2) {
-          group.forEach(exercise => {
+          group.forEach((exercise: any) => {
             exercise.isSuperset = true;
             exercise.supersetGroup = group;
           });
         }
       });
-      
-      // Mark circuit exercises
       const circuitGroups = new Map();
-      exercisesArray.forEach(exercise => {
+      exercisesArray.forEach((exercise: any) => {
         if (exercise.blockType === 'circuit') {
           const key = `${exercise.blockType}_${exercise.orderIndex}`;
           if (!circuitGroups.has(key)) {
@@ -192,18 +177,14 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
           circuitGroups.get(key).push(exercise);
         }
       });
-      
-      // Mark exercises as part of circuit (only if 3 or more exercises)
-      circuitGroups.forEach(group => {
+      circuitGroups.forEach((group: any[]) => {
         if (group.length >= 3) {
-          group.forEach(exercise => {
+          group.forEach((exercise: any) => {
             exercise.isCircuit = true;
             exercise.circuitGroup = group;
           });
         }
       });
-      
-      console.log('🔄 Transformed exercises:', exercisesArray);
       return exercisesArray;
     };
 
@@ -214,25 +195,36 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
   const calculateTotalSets = () => {
     let totalSets = 0;
     const processedGroups = new Set();
-    
-    exercises.forEach(exercise => {
-      if (exercise.isCircuit) {
+    exercises.forEach((exercise: any) => {
+      if (exercise.isCircuit && exercise.circuitGroup) {
         const groupKey = `circuit_${exercise.orderIndex}`;
         if (!processedGroups.has(groupKey)) {
           processedGroups.add(groupKey);
-          totalSets += exercise.sets; // Count circuit as 1 set per round
+          // Count rounds as the max setNumber in the group
+          const maxRound = Math.max(
+            ...exercise.circuitGroup.flatMap((ex: any) =>
+              ex.setDetails.map((set: any) => Number(set.setNumber) || 1)
+            )
+          );
+          totalSets += maxRound;
         }
-      } else if (exercise.isSuperset) {
+      } else if (exercise.isSuperset && exercise.supersetGroup) {
         const groupKey = `superset_${exercise.orderIndex}`;
         if (!processedGroups.has(groupKey)) {
           processedGroups.add(groupKey);
-          totalSets += exercise.sets; // Count superset as 1 set per round
+          // Count rounds as the max setNumber in the group
+          const maxRound = Math.max(
+            ...exercise.supersetGroup.flatMap((ex: any) =>
+              ex.setDetails.map((set: any) => Number(set.setNumber) || 1)
+            )
+          );
+          totalSets += maxRound;
         }
       } else {
-        totalSets += exercise.sets; // Normal exercises count each set
+        // Normal: count all sets
+        totalSets += exercise.setDetails.length;
       }
     });
-    
     return totalSets;
   };
 
@@ -361,73 +353,82 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
         {/* Exercise List */}
         <View style={styles.exerciseSection}>
           <Typography.H2 style={styles.exerciseSectionTitle}>Exercises</Typography.H2>
-          
-          {exercises.map((exercise, index) => (
-            <React.Fragment key={index}>
-              <Card style={[
-                styles.exerciseCard,
-                (
-                  (
-                    (exercise.isSuperset && exercise.supersetGroup && exercise !== exercise.supersetGroup[exercise.supersetGroup.length - 1]) ||
-                    (exercise.isCircuit && exercise.circuitGroup && exercise !== exercise.circuitGroup[exercise.circuitGroup.length - 1])
-                  ) ? { marginBottom: SPACING.xs } : null
-                )
-              ]}>
-                <View style={styles.exerciseContent}>
-                  <View style={styles.exerciseImageWrapper}>
-                    <Image
-                      source={{ uri: exercise.image }}
-                      style={styles.exerciseImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.exercisePlayOverlay}>
-                      <Icon name="play" size={12} color="#fff" />
-                    </View>
-                  </View>
-                  <View style={styles.exerciseInfo}>
-                    <Typography.H2 style={styles.exerciseName}>{exercise.name}</Typography.H2>
-                    <Typography.Subtext style={styles.exerciseMuscles}>{exercise.muscles}</Typography.Subtext>
-                    <View style={styles.exerciseDetails}>
-                      <View style={[
-                        styles.setsBadge,
-                        exercise.isSuperset && styles.supersetBadge,
-                        exercise.isCircuit && styles.circuitBadge
-                      ]}>
-                        <Text style={[
-                          styles.setsBadgeText,
-                          exercise.isSuperset && styles.supersetBadgeText,
-                          exercise.isCircuit && styles.circuitBadgeText
-                        ]}>{exercise.sets} sets</Text>
+          {/* Group exercises by name, then by reps batch */}
+          {(() => {
+            // Map: exercise_name -> [{ ...exercise, setDetails: [...] }]
+            const nameMap = new Map<string, any[]>();
+            exercises.forEach((ex: any) => {
+              if (!nameMap.has(ex.name)) {
+                nameMap.set(ex.name, []);
+              }
+              nameMap.get(ex.name)!.push(ex);
+            });
+            const nameEntries = Array.from(nameMap.entries());
+            return nameEntries.map(([exerciseName, batches], idx) => {
+              const firstBatch = batches[0];
+              // For each exercise, group all sets by reps value
+              const repsMap = new Map<string, any[]>();
+              batches.forEach((batch: any) => {
+                batch.setDetails.forEach((set: any) => {
+                  const reps = set.reps;
+                  if (!repsMap.has(reps)) {
+                    repsMap.set(reps, []);
+                  }
+                  repsMap.get(reps)!.push(set);
+                });
+              });
+              const isCircuit = firstBatch.isCircuit;
+              const isSuperset = firstBatch.isSuperset;
+              // Only show connector if this is NOT the last card in the group
+              const isNotLast = idx < nameEntries.length - 1 && (
+                (isSuperset && nameEntries[idx + 1][1][0].isSuperset) ||
+                (isCircuit && nameEntries[idx + 1][1][0].isCircuit)
+              );
+              return (
+                <React.Fragment key={exerciseName + idx}>
+                  <Card style={styles.exerciseCard}>
+                    <View style={styles.exerciseContent}>
+                      <View style={styles.exerciseImageWrapper}>
+                        <Image
+                          source={{ uri: firstBatch.image }}
+                          style={styles.exerciseImage}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.exercisePlayOverlay}>
+                          <Icon name="play" size={12} color="#fff" />
+                        </View>
                       </View>
-                      <Text style={styles.repsText}>{exercise.reps}</Text>
+                      <View style={styles.exerciseInfo}>
+                        <Typography.H2 style={styles.exerciseName}>{exerciseName}</Typography.H2>
+                        <Typography.Subtext style={styles.exerciseMuscles}>{firstBatch.muscles}</Typography.Subtext>
+                        {/* Render each reps group as a row */}
+                        {Array.from(repsMap.entries()).map(([reps, sets], batchIdx) => (
+                          <View key={batchIdx} style={styles.exerciseDetails}>
+                            <View style={[styles.setsBadge, isSuperset && styles.supersetBadge, isCircuit && styles.circuitBadge]}>
+                              <Text style={[styles.setsBadgeText, isSuperset && styles.supersetBadgeText, isCircuit && styles.circuitBadgeText]}>{sets.length} sets</Text>
+                            </View>
+                            <Text style={styles.repsText}>{reps} reps</Text>
+                          </View>
+                        ))}
+                      </View>
                     </View>
-                  </View>
-                </View>
-              </Card>
-              
-              {/* Connector Icon */}
-              {(exercise.isSuperset &&
-               exercise.supersetGroup &&
-               exercise !== exercise.supersetGroup[exercise.supersetGroup.length - 1]) && (
-                <View style={{ alignItems: 'center', marginTop: -16, marginBottom: 0, zIndex: 10 }}>
-                  <Icon name="arrows-up-down" size={20} color={COLORS.secondary} />
-                </View>
-              )}
-
-              {/* Show circuit link icon between exercises if this exercise is part of a circuit and not the last in the group */}
-              {exercise.isCircuit && 
-               exercise.circuitGroup && 
-               exercise !== exercise.circuitGroup[exercise.circuitGroup.length - 1] && 
-               index < exercises.length - 1 && (
-                <View style={styles.circuitIconContainer}>
-                  <Icon name="link" size={20} color="#a855f7" />
-                </View>
-              )}
-            </React.Fragment>
-          ))}
-
+                  </Card>
+                  {isSuperset && isNotLast && (
+                    <View style={{ alignItems: 'center', marginTop: -16, marginBottom: 0, zIndex: 10 }}>
+                      <Icon name="arrows-up-down" size={20} color={COLORS.secondary} />
+                    </View>
+                  )}
+                  {isCircuit && isNotLast && (
+                    <View style={styles.circuitIconContainer}>
+                      <Icon name="link" size={20} color="#a855f7" />
+                    </View>
+                  )}
+                </React.Fragment>
+              );
+            });
+          })()}
           <TouchableOpacity style={styles.bottomStartButton} onPress={handleStartWorkout}>
-            <Icon name="play" size={18} color="#fff" style={{ marginRight: 12 }} />
+            <Icon name="dumbbell" size={20} color="#fff" style={{ marginRight: 12 }} />
             <Text style={styles.bottomStartButtonText}>Start Workout</Text>
           </TouchableOpacity>
         </View>

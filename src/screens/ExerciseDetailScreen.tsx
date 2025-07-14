@@ -198,6 +198,8 @@ export default function ExerciseDetailScreen({ route, navigation }: any) {
             console.log('[DEBUG] onSetComplete called (single):', setLog);
             setAllSetLogs(prev => [...prev, setLog]);
           }}
+          allSetLogs={allSetLogs}
+          fullWorkoutExercises={fullWorkoutExercises}
         />
       ) : (
         <SupersetExerciseComponent

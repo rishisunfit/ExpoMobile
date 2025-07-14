@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { Card } from './common/Card';
 import { Typography } from './common/Typography';
 import Icon from 'react-native-vector-icons/FontAwesome6';
@@ -15,6 +15,8 @@ interface ExerciseDetailComponentProps {
   isFirstExercise?: boolean;
   isLastExercise?: boolean;
   onSetComplete?: (setLog: any) => void;
+  allSetLogs?: any[];
+  fullWorkoutExercises?: any[];
 }
 
 export function ExerciseDetailComponent({
@@ -23,11 +25,18 @@ export function ExerciseDetailComponent({
   onPreviousExercise,
   isFirstExercise = false,
   isLastExercise = false,
-  onSetComplete
+  onSetComplete,
+  allSetLogs,
+  fullWorkoutExercises,
 }: ExerciseDetailComponentProps) {
   const [currentSet, setCurrentSet] = useState(1);
   const [setsData, setSetsData] = useState<Array<{weight: string, reps: string, notes: string}>>([]);
   const videoRef = useRef(null);
+
+  // Ask Meadow state
+  const [meadowInput, setMeadowInput] = useState('');
+  const [meadowResponse, setMeadowResponse] = useState('');
+  const [meadowLoading, setMeadowLoading] = useState(false);
 
   const exerciseName = exercise?.name || 'Exercise';
   const exerciseMuscles = exercise?.muscles || 'Muscles';
@@ -51,11 +60,11 @@ export function ExerciseDetailComponent({
     setSetsData(initialSetsData);
   }, [exercise, numberOfSets]);
 
-  const handleSetDataChange = (index: number, field: string, value: string) => {
+  const handleSetDataChange = (index: number, field: 'weight' | 'reps' | 'notes', value: string) => {
     const newSetsData = [...setsData];
     if (newSetsData[index]) {
-        newSetsData[index][field] = value;
-        setSetsData(newSetsData);
+      newSetsData[index][field] = value;
+      setSetsData(newSetsData);
     }
   };
 
@@ -76,6 +85,70 @@ export function ExerciseDetailComponent({
 
   const handleEditSet = (setNumberToEdit: number) => {
     setCurrentSet(setNumberToEdit);
+  };
+
+  // Helper to format the workout log for AI context
+  function formatWorkoutLog(
+    allSetLogs: Array<{ exerciseId: string; setNumber: number; weight: string; reps: string; notes: string }>,
+    fullWorkoutExercises: Array<{ id: string; name?: string; exercise_name?: string }>
+  ): string {
+    if (!allSetLogs || !fullWorkoutExercises) return '';
+    // Map exerciseId to name for easy lookup
+    const idToName: Record<string, string> = {};
+    fullWorkoutExercises.forEach((ex) => {
+      idToName[ex.id] = (ex.name || ex.exercise_name) ?? '';
+    });
+    // Group logs by exercise
+    const logsByExercise: Record<string, Array<{ setNumber: number; weight: string; reps: string; notes: string }>> = {};
+    allSetLogs.forEach((log) => {
+      const name = idToName[log.exerciseId] || 'Unknown Exercise';
+      if (!logsByExercise[name]) logsByExercise[name] = [];
+      logsByExercise[name].push(log);
+    });
+    // Format as string
+    return Object.entries(logsByExercise).map(([name, logs]) => {
+      const sets = logs.map(
+        (log, i) =>
+          `  Set ${log.setNumber}: ${log.weight || '-'} lbs x ${log.reps || '-'} reps${log.notes ? ` (${log.notes})` : ''}`
+      ).join('\n');
+      return `${name}:\n${sets}`;
+    }).join('\n\n');
+  }
+
+  // Mock AI API call (replace with real API as needed)
+  const askMeadow = async (question: string) => {
+    setMeadowLoading(true);
+    setMeadowResponse('');
+    try {
+      let workoutLogString = '';
+      if (typeof allSetLogs !== 'undefined' && typeof fullWorkoutExercises !== 'undefined') {
+        workoutLogString = formatWorkoutLog(allSetLogs, fullWorkoutExercises);
+      }
+      const messages = [
+        { role: 'system', content: 'You are Meadow, a fitness assistant.' },
+      ];
+      if (workoutLogString) {
+        messages.push({ role: 'user', content: `Here is the workout log:\n${workoutLogString}` });
+      }
+      messages.push({ role: 'user', content: question });
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages,
+          max_tokens: 150,
+        }),
+      });
+      const data = await response.json();
+      setMeadowResponse(data.choices?.[0]?.message?.content || 'No response');
+    } catch (err) {
+      setMeadowResponse('Error contacting AI service.');
+    }
+    setMeadowLoading(false);
   };
 
   return (
@@ -105,16 +178,18 @@ export function ExerciseDetailComponent({
         {/* Video Section */}
         <View style={styles.videoSection}>
           <View style={styles.videoContainer}>
-            <Video
-              ref={videoRef}
-              style={styles.videoPlayer}
-              source={{
-                uri: 'https://customer-8g7cy0djek05hzgw.cloudflarestream.com/3c2ac74dbf59aec6907155eb310e85f6/manifest/video.m3u8',
-              }}
-              useNativeControls={false}
-              resizeMode={ResizeMode.COVER}
-              isMuted
-            />
+            {exercise?.image ? (
+              <Image
+                source={{ uri: exercise.image }}
+                style={styles.videoPlayer}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={{ ...styles.videoPlayer, backgroundColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}> 
+                <Icon name="image" size={48} color="#9ca3af" />
+                <Text style={{ color: '#9ca3af', marginTop: 8 }}>No Image</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -145,7 +220,7 @@ export function ExerciseDetailComponent({
             const setData = setsData[setIndex] || { weight: '', reps: '', notes: '' };
 
             return (
-              <Card key={setNumber} style={[styles.setCard, isUpcoming && styles.disabledCard]}>
+              <Card key={setNumber} style={[styles.setCard, isUpcoming && styles.disabledCard].filter(Boolean)}>
                 <View style={styles.setHeader}>
                   <Typography.H2>Set {setNumber}</Typography.H2>
                   <View style={styles.tagContainer}>
@@ -249,11 +324,27 @@ export function ExerciseDetailComponent({
                 placeholder='e.g. "My knees hurt on set 2, what weight should I use?" Or "How far apart should my hands be on the barbell?"'
                 multiline
                 numberOfLines={3}
+                value={meadowInput}
+                onChangeText={setMeadowInput}
+                editable={!meadowLoading}
               />
-              <TouchableOpacity style={styles.meadowSendButton}>
-                <Icon name="paper-plane" size={16} color="#fff" />
+              <TouchableOpacity
+                style={StyleSheet.flatten([styles.meadowSendButton, { opacity: meadowInput.trim() && !meadowLoading ? 1 : 0.5 }])}
+                onPress={() => askMeadow(meadowInput)}
+                disabled={!meadowInput.trim() || meadowLoading}
+              >
+                {meadowLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Icon name="paper-plane" size={16} color="#fff" />
+                )}
               </TouchableOpacity>
             </View>
+            {meadowResponse ? (
+              <View style={{ marginTop: 16, backgroundColor: '#f1f5f9', borderRadius: 12, padding: 12 }}>
+                <Text style={{ color: COLORS.text.primary }}>{meadowResponse}</Text>
+              </View>
+            ) : null}
           </Card>
         </View>
       </ScrollView>

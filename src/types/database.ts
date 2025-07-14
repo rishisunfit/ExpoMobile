@@ -624,6 +624,45 @@ export type Database = {
         }
         Relationships: []
       }
+      mobility_videos: {
+        Row: {
+          id: string;
+          title: string;
+          description: string | null;
+          video_url: string;
+          thumbnail_url: string | null;
+          category: string | null;
+          created_at: string | null;
+          difficulty: string | null;
+          duration: number | null;
+          is_favorite: boolean | null;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          description?: string | null;
+          video_url: string;
+          thumbnail_url?: string | null;
+          category?: string | null;
+          created_at?: string | null;
+          difficulty?: string | null;
+          duration?: number | null;
+          is_favorite?: boolean | null;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          description?: string | null;
+          video_url?: string;
+          thumbnail_url?: string | null;
+          category?: string | null;
+          created_at?: string | null;
+          difficulty?: string | null;
+          duration?: number | null;
+          is_favorite?: boolean | null;
+        };
+        Relationships: [];
+      };
       workout_blocks: {
         Row: {
           created_at: string | null

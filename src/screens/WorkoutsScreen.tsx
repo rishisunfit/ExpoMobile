@@ -4,14 +4,201 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card } from '../components/common/Card';
 import { Typography } from '../components/common/Typography';
 import Icon from 'react-native-vector-icons/FontAwesome6';
-import { COLORS, SPACING } from '../styles';
+import { COLORS } from '../styles';
 import { supabase } from '../../lib/supabase';
+import { format, parseISO, getDay, getDaysInMonth } from 'date-fns';
+import { mapSchedule, ScheduleRow, ScheduleMap, MappedScheduleItem } from '../utils/schedule';
+import { Database } from '../types/database';
+
 
 const { width } = Dimensions.get('window');
+
+// Type for a schedule row from Supabase
+
+
+interface MyCalendarProps {
+  clientId: string;
+}
+
+const MyCalendar = ({ clientId, navigation }: MyCalendarProps & { navigation: any }) => {
+  const [schedule, setSchedule] = useState<MappedScheduleItem[]>([]);
+  const [dayMap, setDayMap] = useState<Record<string, { color: string; label: string }>>({});
+  const [loading, setLoading] = useState(true);
+  const [currentMonth, setCurrentMonth] = useState<number>(new Date().getMonth() + 1); // 1-based
+  const [currentYear, setCurrentYear] = useState<number>(new Date().getFullYear());
+
+  useEffect(() => {
+    const loadSchedule = async () => {
+      setLoading(true);
+      const today = new Date();
+      const start = today.toISOString().split('T')[0]; // e.g. "2025-07-11"
+      const days = 14;
+
+      const { data, error } = await supabase
+        .rpc<any, ScheduleRow[]>('get_client_schedule', {
+          client: clientId,
+          start,
+          days,
+        });
+
+      if (error) {
+        console.error("Failed to load schedule:", error);
+        setSchedule([]);
+        setDayMap({});
+      } else {
+        if (Array.isArray(data)) {
+          const { schedule: sched, dayMap: dMap } = mapSchedule(data);
+          setSchedule(sched);
+          setDayMap(dMap);
+        } else {
+          setSchedule([]);
+          setDayMap({});
+        }
+      }
+      setLoading(false);
+    };
+
+    loadSchedule();
+  }, [clientId]);
+
+  // Calendar grid logic
+  const firstOfMonth = new Date(currentYear, currentMonth - 1, 1);
+  const firstWeekday = getDay(firstOfMonth); // 0 = Sunday, 1 = Monday, ...
+  const daysInMonth = getDaysInMonth(firstOfMonth);
+
+  // Build a 2D array of weeks (each week is an array of 7 days or null)
+  const calendarRows: Array<Array<{ day: number; dateKey: string } | null>> = [];
+  let week: Array<{ day: number; dateKey: string } | null> = [];
+  let dayCounter = 1;
+
+  // Pad the first week with nulls if needed
+  for (let i = 0; i < firstWeekday; i++) {
+    week.push(null);
+  }
+
+  while (dayCounter <= daysInMonth) {
+    while (week.length < 7 && dayCounter <= daysInMonth) {
+      const paddedMonth = String(currentMonth).padStart(2, '0');
+      const paddedDay = String(dayCounter).padStart(2, '0');
+      const dateKey = `${currentYear}-${paddedMonth}-${paddedDay}`;
+      week.push({ day: dayCounter, dateKey });
+      dayCounter++;
+    }
+    // If week is not full, pad with nulls
+    while (week.length < 7) {
+      week.push(null);
+    }
+    calendarRows.push(week);
+    week = [];
+  }
+
+  // Render weekday headers and the calendar grid
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Typography.H2>My Calendar</Typography.H2>
+        <TouchableOpacity>
+          <Text style={styles.link} onPress={() => navigation.navigate('ReorderScreen')}>Full View</Text>
+        </TouchableOpacity>
+      </View>
+      <Card style={styles.calendarCard}>
+        <View style={styles.calendarHeader}>
+          <Typography.Body style={styles.calendarMonth}>{format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy')}</Typography.Body>
+          <View style={styles.calendarNav}>
+            <TouchableOpacity style={styles.calendarNavBtn} onPress={() => {
+              if (currentMonth === 1) {
+                setCurrentMonth(12);
+                setCurrentYear(currentYear - 1);
+              } else {
+                setCurrentMonth(currentMonth - 1);
+              }
+            }}>
+              <Icon name="chevron-left" size={14} color={COLORS.text.secondary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.calendarNavBtn} onPress={() => {
+              if (currentMonth === 12) {
+                setCurrentMonth(1);
+                setCurrentYear(currentYear + 1);
+              } else {
+                setCurrentMonth(currentMonth + 1);
+              }
+            }}>
+              <Icon name="chevron-right" size={14} color={COLORS.text.secondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        {/* Calendar Days Header */}
+        <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+          {['S','M','T','W','T','F','S'].map((d, i) => (
+            <Text key={`${d}-${i}`} style={styles.calendarDayHeader}>{d}</Text>
+          ))}
+        </View>
+        {/* Calendar Grid */}
+        <View style={styles.calendarGrid}>
+          {calendarRows.map((week, rowIdx) => (
+            <View key={rowIdx} style={{ flexDirection: 'row' }}>
+              {week.map((cell, colIdx) => {
+                if (!cell) {
+                  return <View key={colIdx} style={styles.calendarDate} />;
+                }
+                const dayInfo = dayMap[cell.dateKey];
+                let cellStyle = styles.calendarDate;
+                let textStyle = { color: COLORS.text.primary };
+                if (dayInfo) {
+                  cellStyle = { ...cellStyle, backgroundColor: dayInfo.color, borderRadius: 18 };
+                  textStyle = { color: '#fff' } as any;
+                }
+                return (
+                  <View key={colIdx} style={cellStyle}>
+                    <Text style={textStyle}>{cell.day}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+        {/* Weekly Schedule */}
+        <View style={styles.calendarScheduleSection}>
+          <View style={styles.sectionHeaderRow}>
+            <Typography.Body style={styles.calendarScheduleTitle}>This Week's Schedule</Typography.Body>
+            <TouchableOpacity style={styles.calendarReorderBtn}>
+              <Icon name="arrows-up-down" size={14} color={COLORS.primary} style={{ marginRight: 4 }} />
+              <Text style={styles.link} onPress={() => navigation.navigate('ReorderScreen')}>Re-order</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.calendarScheduleList}>
+            {loading ? (
+              <Text>Loading...</Text>
+            ) : (
+              schedule.map((item, i) => (
+                <View key={item.day + i} style={styles.calendarScheduleItem}>
+                  <View style={styles.calendarScheduleDayRow}>
+                    <View style={[styles.calendarScheduleDot, { backgroundColor: item.color }]} />
+                    <Text style={styles.calendarScheduleDay}>{item.day}</Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.calendarScheduleLabel,
+                      item.label !== 'Rest Day' && { color: COLORS.primary }
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+      </Card>
+    </View>
+  );
+};
 
 export default function WorkoutsScreen({ navigation }: any) {
   const [workoutName, setWorkoutName] = useState('Loading...');
   const [loading, setLoading] = useState(true);
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [mobilityFavorites, setMobilityFavorites] = useState<Database['public']['Tables']['mobility_videos']['Row'][]>([]);
 
   useEffect(() => {
     const fetchTodaysWorkout = async () => {
@@ -69,6 +256,26 @@ export default function WorkoutsScreen({ navigation }: any) {
     fetchTodaysWorkout();
   }, []);
 
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setClientId(user.id);
+    };
+    fetchUser();
+  }, []);
+
+  useEffect(() => {
+    const fetchFavorites = async () => {
+      const { data, error } = await supabase
+        .from('mobility_videos')
+        .select('*')
+        .eq('is_favorite', true)
+        .order('created_at', { ascending: false });
+      if (!error && data) setMobilityFavorites(data.slice(0, 2));
+    };
+    fetchFavorites();
+  }, []);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background.secondary }}>
       <View style={styles.container}>
@@ -106,7 +313,7 @@ export default function WorkoutsScreen({ navigation }: any) {
                   style={styles.sessionButton}
                   onPress={() => navigation.navigate('TodaysWorkout')}
                 >
-                  <Icon name="play" size={14} color="#fff" style={{ marginRight: 8 }} />
+                  <Icon name="dumbbell" size={16} color="#fff" style={{ marginRight: 8 }} />
                   <Text style={styles.sessionButtonText}>Start Session</Text>
                 </TouchableOpacity>
               </View>
@@ -114,88 +321,7 @@ export default function WorkoutsScreen({ navigation }: any) {
           </View>
 
           {/* My Calendar */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Typography.H2>My Calendar</Typography.H2>
-              <TouchableOpacity>
-                <Text style={styles.link}>Full View</Text>
-              </TouchableOpacity>
-            </View>
-            <Card style={styles.calendarCard}>
-              <View style={styles.calendarHeader}>
-                <Typography.Body style={styles.calendarMonth}>June 2024</Typography.Body>
-                <View style={styles.calendarNav}>
-                  <TouchableOpacity style={styles.calendarNavBtn}>
-                    <Icon name="chevron-left" size={14} color={COLORS.text.secondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.calendarNavBtn}>
-                    <Icon name="chevron-right" size={14} color={COLORS.text.secondary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              {/* Calendar Days */}
-              <View style={styles.calendarGrid}>
-                {['S','M','T','W','T','F','S'].map((d, i) => (
-                  <Text key={`${d}-${i}`} style={styles.calendarDayHeader}>{d}</Text>
-                ))}
-                {/* Dates: static for now */}
-                {[26,27,28,29,30,31,1,2,3,4,5,6,7,8].map((date, i) => {
-                  let style = styles.calendarDate;
-                  if (date === 2 || date === 8) style = [style, styles.calendarDateBlue];
-                  if (date === 3 || date === 5) style = [style, styles.calendarDateAccentLight];
-                  if (date === 4) style = [style, styles.calendarDateAccent];
-                  if (date === 7) style = [style, styles.calendarDateOrange];
-                  return (
-                    <Text key={date} style={style}>{date}</Text>
-                  );
-                })}
-              </View>
-              {/* Calendar Legend */}
-              <View style={styles.calendarLegendRow}>
-                <View style={styles.calendarLegendItem}>
-                  <View style={[styles.calendarLegendDot, { backgroundColor: COLORS.primary }]} />
-                  <Text style={styles.calendarLegendText}>Strength</Text>
-                </View>
-                <View style={styles.calendarLegendItem}>
-                  <View style={[styles.calendarLegendDot, { backgroundColor: COLORS.secondary }]} />
-                  <Text style={styles.calendarLegendText}>Cardio</Text>
-                </View>
-                <View style={styles.calendarLegendItem}>
-                  <View style={[styles.calendarLegendDot, { backgroundColor: COLORS.warning }]} />
-                  <Text style={styles.calendarLegendText}>Sports</Text>
-                </View>
-              </View>
-              {/* Weekly Schedule */}
-              <View style={styles.calendarScheduleSection}>
-                <View style={styles.sectionHeaderRow}>
-                  <Typography.Body style={styles.calendarScheduleTitle}>This Week's Schedule</Typography.Body>
-                  <TouchableOpacity style={styles.calendarReorderBtn}>
-                    <Icon name="arrows-up-down" size={14} color={COLORS.primary} style={{ marginRight: 4 }} />
-                    <Text style={styles.link}>Re-order</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.calendarScheduleList}>
-                  {[
-                    { day: 'Sun 02', color: COLORS.secondary, label: 'Cardio & Mobility' },
-                    { day: 'Mon 03', color: COLORS.primary, label: 'Push Day' },
-                    { day: 'Tue 04', color: COLORS.primary, label: 'Upper Body Strength' },
-                    { day: 'Wed 05', color: COLORS.primary, label: 'Pull Day' },
-                    { day: 'Thu 06', color: '#d1d5db', label: 'Rest Day' },
-                    { day: 'Fri 07', color: COLORS.warning, label: 'Basketball Game' },
-                    { day: 'Sat 08', color: COLORS.secondary, label: 'Active Recovery' },
-                  ].map((item, i) => (
-                    <View key={item.day} style={styles.calendarScheduleItem}>
-                      <View style={styles.calendarScheduleDayRow}>
-                        <View style={[styles.calendarScheduleDot, { backgroundColor: item.color }]} />
-                        <Text style={styles.calendarScheduleDay}>{item.day}</Text>
-                      </View>
-                      <Text style={styles.calendarScheduleLabel}>{item.label}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </Card>
-          </View>
+          {clientId && <MyCalendar clientId={clientId} navigation={navigation} />}
 
           {/* Ask Meadow */}
           <View style={styles.section}>
@@ -280,52 +406,64 @@ export default function WorkoutsScreen({ navigation }: any) {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Typography.H2>Video Mobility</Typography.H2>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('VideoMobilityScreen')}>
                 <Text style={styles.link}>See All</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.videoList}>
-              {[
-                {
-                  title: 'Morning Flow',
-                  desc: '15 min • Full Body Stretch',
-                  level: 'Beginner',
-                  levelColor: '#ecfdf5',
-                  levelTextColor: '#059669',
-                  rating: '4.7',
-                  img: 'https://storage.googleapis.com/uxpilot-auth.appspot.com/cccb3656f0-84a0c75b8a65b1e18175.png',
-                },
-                {
-                  title: 'Hip Mobility',
-                  desc: '20 min • Lower Body Focus',
-                  level: 'All Levels',
-                  levelColor: '#dbeafe',
-                  levelTextColor: '#2563eb',
-                  rating: '4.8',
-                  img: 'https://storage.googleapis.com/uxpilot-auth.appspot.com/7f35d97bc3-b0ffd0a389e8632d3532.png',
-                },
-              ].map((item, i) => (
-                <Card key={item.title} style={styles.videoCard}>
-                  <View style={styles.videoCardRow}>
-                    <View style={styles.videoThumbWrapper}>
-                      <Image source={{ uri: item.img }} style={styles.videoThumb} resizeMode="cover" />
-                      <View style={styles.videoPlayBtnWrapper}>
-                        <View style={styles.videoPlayBtn}>
-                          <Icon name="play" size={16} color={COLORS.text.primary} />
+              {mobilityFavorites.length === 0 ? (
+                <Text style={{ color: COLORS.text.secondary, padding: 16 }}>No favorites yet.</Text>
+              ) : (
+                mobilityFavorites.map((item) => {
+                  // Badge color logic
+                  let levelColor = '#dbeafe', levelTextColor = '#2563eb';
+                  if (item.difficulty === 'beginner') {
+                    levelColor = '#ecfdf5'; levelTextColor = '#059669';
+                  } else if (item.difficulty === 'intermediate') {
+                    levelColor = '#fff7ed'; levelTextColor = '#ea580c';
+                  } else if (item.difficulty === 'advanced') {
+                    levelColor = '#fee2e2'; levelTextColor = '#dc2626';
+                  } else if (item.difficulty === 'all levels') {
+                    levelColor = '#dbeafe'; levelTextColor = '#2563eb';
+                  }
+                  return (
+                    <Card key={item.id} style={styles.videoCard}>
+                      <View style={styles.videoCardRow}>
+                        <View style={styles.videoThumbWrapper}>
+                          {(() => {
+                            let thumbSource = null;
+                            if (item.thumbnail_url) {
+                              thumbSource = { uri: item.thumbnail_url };
+                            } else if (item.video_url && (item.video_url.includes('youtube.com') || item.video_url.includes('youtu.be'))) {
+                              const youtubeId = extractYouTubeId(item.video_url);
+                              if (youtubeId) {
+                                thumbSource = { uri: `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg` };
+                              }
+                            }
+                            if (!thumbSource) {
+                              thumbSource = { uri: REMOTE_PLACEHOLDER };
+                            }
+                            return <Image source={thumbSource} style={styles.videoThumb} resizeMode="cover" />;
+                          })()}
+                          <View style={styles.videoPlayBtnWrapper}>
+                            <View style={styles.videoPlayBtn}>
+                              <Icon name="play" size={16} color={COLORS.text.primary} />
+                            </View>
+                          </View>
+                        </View>
+                        <View style={styles.videoCardContent}>
+                          <Typography.Body style={styles.videoCardTitle}>{item.title}</Typography.Body>
+                          <Typography.Subtext style={styles.videoCardDesc}>{item.description || ''}</Typography.Subtext>
+                          <View style={styles.videoCardMetaRow}>
+                            <Text style={[styles.videoCardLevel, { backgroundColor: levelColor, color: levelTextColor }]}>{item.difficulty ? item.difficulty.charAt(0).toUpperCase() + item.difficulty.slice(1) : 'All Levels'}</Text>
+                            <Text style={styles.videoCardRating}>{item.duration ? `${item.duration} min` : ''}</Text>
+                          </View>
                         </View>
                       </View>
-                    </View>
-                    <View style={styles.videoCardContent}>
-                      <Typography.Body style={styles.videoCardTitle}>{item.title}</Typography.Body>
-                      <Typography.Subtext style={styles.videoCardDesc}>{item.desc}</Typography.Subtext>
-                      <View style={styles.videoCardMetaRow}>
-                        <Text style={[styles.videoCardLevel, { backgroundColor: item.levelColor, color: item.levelTextColor }]}>{item.level}</Text>
-                        <Text style={styles.videoCardRating}>{item.rating} ⭐</Text>
-                      </View>
-                    </View>
-                  </View>
-                </Card>
-              ))}
+                    </Card>
+                  );
+                })
+              )}
             </View>
           </View>
         </ScrollView>
@@ -333,6 +471,14 @@ export default function WorkoutsScreen({ navigation }: any) {
     </SafeAreaView>
   );
 }
+
+// Helper to extract YouTube ID
+function extractYouTubeId(url: string) {
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/))([\w-]{11})/);
+  return match ? match[1] : '';
+}
+
+const REMOTE_PLACEHOLDER = 'https://via.placeholder.com/96x80.png?text=No+Image';
 
 const styles = StyleSheet.create({
   container: {
@@ -452,27 +598,40 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 24,
-    marginTop: 8,
-    marginBottom: 16,
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+    paddingHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 8,
+    backgroundColor: '#f5f6fa',
+    borderRadius: 12,
+    alignSelf: 'center',
+    width: 7 * 36,
   },
   calendarDayHeader: {
-    width: (width - 48) / 7,
+    width: 36,
+    height: 36,
     textAlign: 'center',
+    textAlignVertical: 'center',
     color: COLORS.text.secondary,
     fontWeight: '500',
-    fontSize: 12,
-    paddingVertical: 8,
+    fontSize: 14,
+    marginBottom: 2,
   },
   calendarDate: {
-    width: (width - 48) / 7,
+    width: 36,
+    height: 36,
     textAlign: 'center',
+    textAlignVertical: 'center',
     color: COLORS.text.primary,
-    fontSize: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    fontSize: 15,
+    borderRadius: 18,
+    marginVertical: 2,
+    marginHorizontal: 0,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   calendarDateBlue: {
     backgroundColor: '#dbeafe',

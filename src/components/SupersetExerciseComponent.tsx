@@ -147,24 +147,16 @@ export function SupersetExerciseComponent({
         {/* Current Exercise Video */}
         <View style={styles.videoSection}>
           <View style={styles.videoContainer}>
-            {currentExercise?.example?.video_url ? (
-              <Video
-                ref={videoRef}
-                style={styles.videoPlayer}
-                source={{ uri: currentExercise.example.video_url }}
-                useNativeControls={false}
-                resizeMode={ResizeMode.COVER}
-                isMuted
-              />
-            ) : currentExercise?.imageUrl ? (
+            {currentExercise?.image ? (
               <Image
-                source={{ uri: currentExercise.imageUrl }}
+                source={{ uri: currentExercise.image }}
                 style={styles.videoPlayer}
                 resizeMode="cover"
               />
             ) : (
               <View style={styles.placeholderVideo}>
-                <Icon name="play" size={32} color="#fff" />
+                <Icon name="image" size={48} color="#9ca3af" />
+                <Text style={{ color: '#9ca3af', marginTop: 8 }}>No Image</Text>
               </View>
             )}
             
@@ -389,10 +381,16 @@ export function SupersetExerciseComponent({
           {/* Navigation Buttons */}
           <View style={styles.navigationSection}>
             {!isLastGroup && (
-              <TouchableOpacity style={[styles.nextButton, { backgroundColor: accentColor }]} onPress={onFinishGroup}>
-                <Text style={styles.nextButtonText}>Next Group</Text>
-                <Icon name="chevron-right" size={16} color="#fff" />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity style={[styles.prevButton, { backgroundColor: accentColor, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20 }]} onPress={onPreviousExercise}>
+                  <Icon name="chevron-left" size={16} color="#fff" />
+                  <Text style={styles.nextButtonText}>Previous Exercise</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.nextButton, { backgroundColor: accentColor }]} onPress={onFinishGroup}>
+                  <Text style={styles.nextButtonText}>Next Exercise</Text>
+                  <Icon name="chevron-right" size={16} color="#fff" />
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         </View>
@@ -774,5 +772,12 @@ const styles = StyleSheet.create({
   editingSetCard: {
     borderColor: COLORS.error,
     borderWidth: 2,
+  },
+  prevButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 20,
   },
 }); 
