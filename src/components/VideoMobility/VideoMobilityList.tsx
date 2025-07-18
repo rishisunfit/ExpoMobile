@@ -6,6 +6,8 @@ import { supabase } from '../../../lib/supabase';
 import { Card } from '../common/Card';
 import { COLORS } from '../../styles';
 import { Database } from '../../types/database';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 
 const { width } = Dimensions.get('window');
 
@@ -28,10 +30,19 @@ function extractVimeoEmbedInfo(url: string) {
   return { id: match[1], token: match[2] };
 }
 
+// Define the navigation param list for this stack
+// Add the type for VideoMobilityDetailScreen
+
+type RootStackParamList = {
+  VideoMobilityDetailScreen: { video: any };
+  // ... other screens if needed
+};
+
 export default function VideoMobilityList() {
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
+  // Type navigation for correct param passing
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
     const fetchVideos = async () => {
@@ -46,75 +57,12 @@ export default function VideoMobilityList() {
     fetchVideos();
   }, []);
 
-  const renderVideoPlayer = () => {
-    if (!selectedVideo) return null;
-    const type = getVideoType(selectedVideo.video_url);
-    if (type === 'youtube') {
-      const youtubeId = extractYouTubeId(selectedVideo.video_url);
-      if (!youtubeId) {
-        return <Text>Invalid YouTube URL.</Text>;
-      }
-      return (
-        <View style={styles.playerContainer}>
-          <YoutubePlayer
-            height={220}
-            width={width - 48}
-            videoId={youtubeId}
-            play={true}
-            webViewStyle={{ borderRadius: 12, overflow: 'hidden' }}
-            initialPlayerParams={{ controls: true, modestbranding: true }}
-          />
-        </View>
-      );
-    } else if (type === 'vimeo') {
-      const embedInfo = extractVimeoEmbedInfo(selectedVideo.video_url);
-      if (!embedInfo || !embedInfo.id) {
-        console.warn('Invalid Vimeo URL:', selectedVideo.video_url);
-        return <Text style={{ color: 'red', textAlign: 'center' }}>Invalid Vimeo URL: {selectedVideo.video_url}</Text>;
-      }
-      const embedUrl = embedInfo.token
-        ? `https://player.vimeo.com/video/${embedInfo.id}?h=${embedInfo.token}`
-        : `https://player.vimeo.com/video/${embedInfo.id}`;
-      // Debug: If this is the hardcoded test video, show example.com instead
-      const isHardcodedTest = selectedVideo.id === 'hardcoded-vimeo';
-      return (
-        <View style={[styles.playerContainer, { backgroundColor: '#eee', borderWidth: 2, borderColor: 'red' }]}> 
-          <WebView
-            source={{ uri: isHardcodedTest ? 'https://example.com' : embedUrl }}
-            style={{ width: width - 48, height: 220, borderRadius: 12, overflow: 'hidden', backgroundColor: 'yellow' }}
-            allowsFullscreenVideo
-          />
-        </View>
-      );
-    } else {
-      return (
-        <View style={styles.playerContainer}>
-          <Text>Unsupported video type.</Text>
-        </View>
-      );
-    }
-  };
-
   if (loading) {
     return <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />;
   }
 
-  if (selectedVideo) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-        {renderVideoPlayer()}
-        <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedVideo(null)}>
-          <Text style={styles.closeBtnText}>Close</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      ) : (
         <FlatList
           data={videos}
           keyExtractor={item => item.id}
@@ -130,7 +78,7 @@ export default function VideoMobilityList() {
               }
             }
             return (
-              <TouchableOpacity onPress={() => setSelectedVideo(item)}>
+            <TouchableOpacity onPress={() => navigation.navigate('VideoMobilityDetailScreen', { video: item })}>
                 <Card style={styles.card}>
                   <View style={styles.thumbnailContainer}>
                     {thumbnailSource ? (
@@ -149,17 +97,8 @@ export default function VideoMobilityList() {
               </TouchableOpacity>
             );
           }}
-          ListHeaderComponent={selectedVideo ? (
-            <View style={{ marginBottom: 24 }}>
-              {renderVideoPlayer()}
-              <TouchableOpacity onPress={() => setSelectedVideo(null)} style={{ alignSelf: 'flex-end', marginTop: 8 }}>
-                <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>Close Video</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
           contentContainerStyle={{ padding: 16, paddingTop: 0 }}
         />
-      )}
     </View>
   );
 }

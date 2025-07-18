@@ -14,7 +14,12 @@ import FreestyleWorkoutScreen from "../screens/FreestyleWorkoutScreen";
 import ReorderScreen from '../screens/ReorderScreen';
 import MobilityAssessmentScreen from '../screens/MobilityAssessmentScreen';
 import VideoMobilityScreen from '../screens/VideoMobilityScreen';
+import VideoMobilityDetailScreen from '../screens/VideoMobilityDetailScreen';
+import AssessmentResults from '../screens/AssessmentResults';
+import AssessmentDetailsScreen from '../screens/AssessmentDetailsScreen';
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import AnkleDorsiflexion from '../screens/IndividualAssessmentScreens/AnkleDorsiflexion';
+import HipInternalRotation from '../screens/IndividualAssessmentScreens/HipInternalRotation';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -72,6 +77,11 @@ export function AppNavigator() {
         <Stack.Screen name="FreestyleWorkout" component={FreestyleWorkoutScreen} />
         <Stack.Screen name="MobilityAssessmentScreen" component={MobilityAssessmentScreen} />
         <Stack.Screen name="VideoMobilityScreen" component={VideoMobilityScreen} />
+        <Stack.Screen name="VideoMobilityDetailScreen" component={VideoMobilityDetailScreen} />
+        <Stack.Screen name="AssessmentResults" component={AssessmentResults} />
+        <Stack.Screen name="AssessmentDetailsScreen" component={AssessmentDetailsScreen} />
+        <Stack.Screen name="AnkleDorsiflexion" component={AnkleDorsiflexion} />
+        <Stack.Screen name="HipInternalRotation" component={HipInternalRotation} />
       </Stack.Navigator>
     </SafeAreaProvider>
   );

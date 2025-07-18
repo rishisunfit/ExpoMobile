@@ -16,6 +16,7 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [programId, setProgramId] = useState<string | null>(null);
   const [targetDay, setTargetDay] = useState<number | null>(null);
+  const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTodaysWorkout = async () => {
@@ -67,12 +68,21 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
           }
           
           if (workoutData && workoutData.length > 0) {
-            const workout = workoutData[0];
+            const workout: any = workoutData[0];
             setWorkoutName(workout.workout_name || 'Workout Not Found');
             setWorkoutId(workout.workout_id as string); // Store the workout ID
-            
-            // Now fetch the exercise details
+            // Fetch cover_photo from workouts table
+            let coverPhotoUrl = null;
             if (workout.workout_id) {
+              const { data: workoutRow, error: workoutRowError } = await supabase
+                .from('workouts')
+                .select('cover_photo')
+                .eq('id', workout.workout_id)
+                .single();
+              if (!workoutRowError && workoutRow && workoutRow.cover_photo) {
+                coverPhotoUrl = workoutRow.cover_photo;
+              }
+              setCoverPhoto(coverPhotoUrl);
               await fetchWorkoutExercises(workout.workout_id as string);
             }
           } else {
@@ -129,7 +139,7 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
         const key = item.exercise_name;
         if (!exerciseMap.has(key)) {
           exerciseMap.set(key, {
-            id: key,
+            id: item.exercise_id, // <-- GOOD: this is the UUID
             name: item.exercise_name,
             muscles: item.muscles_trained,
             image: imageMap[item.exercise_id] || '', // Use fetched image or blank
@@ -302,7 +312,7 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
         {/* Workout Cover */}
         <View style={styles.workoutCover}>
           <Image
-            source={{ uri: 'https://storage.googleapis.com/uxpilot-auth.appspot.com/f87bb8eb54-29e9ef32f3de3995d7f0.png' }}
+            source={{ uri: coverPhoto || 'https://storage.googleapis.com/uxpilot-auth.appspot.com/f87bb8eb54-29e9ef32f3de3995d7f0.png' }}
             style={styles.coverImage}
             resizeMode="cover"
           />

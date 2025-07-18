@@ -12,7 +12,7 @@ import { Card } from '../components/common/Card';
 import { COLORS, SPACING } from '../styles';
 import { supabase } from '../../lib/supabase';
 
-export default function DashboardScreen() {
+export default function DashboardScreen({ navigation }: any) {
   const [userName, setUserName] = useState('User');
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export default function DashboardScreen() {
         </Card>
 
         <DailyHabits />
-        <WorkoutCard />
+        <WorkoutCard navigation={navigation} />
         <NutritionCard />
         <StepsCard />
         <SleepCard />

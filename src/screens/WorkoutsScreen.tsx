@@ -199,6 +199,7 @@ export default function WorkoutsScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [clientId, setClientId] = useState<string | null>(null);
   const [mobilityFavorites, setMobilityFavorites] = useState<Database['public']['Tables']['mobility_videos']['Row'][]>([]);
+  const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTodaysWorkout = async () => {
@@ -235,6 +236,17 @@ export default function WorkoutsScreen({ navigation }: any) {
               console.log('🏋️ First workout object:', data[0]);
               console.log('🏋️ Workout name field:', data[0].workout_name);
               setWorkoutName(data[0].workout_name || 'Workout Not Found');
+              // Fetch cover_photo from workouts table
+              if (data[0].workout_id) {
+                const { data: workoutRow, error: workoutRowError } = await supabase
+                  .from('workouts')
+                  .select('cover_photo')
+                  .eq('id', data[0].workout_id)
+                  .single();
+                if (!workoutRowError && workoutRow && workoutRow.cover_photo) {
+                  setCoverPhoto(workoutRow.cover_photo);
+                }
+              }
             } else {
               console.log('📭 No workouts found in data');
               setWorkoutName('No Workout Today');
@@ -291,7 +303,7 @@ export default function WorkoutsScreen({ navigation }: any) {
             <Card style={styles.sessionCard}>
               <View style={styles.sessionImageWrapper}>
                 <Image
-                  source={{ uri: 'https://storage.googleapis.com/uxpilot-auth.appspot.com/f87bb8eb54-5dacafe011510304ef67.png' }}
+                  source={{ uri: coverPhoto || 'https://storage.googleapis.com/uxpilot-auth.appspot.com/f87bb8eb54-5dacafe011510304ef67.png' }}
                   style={styles.sessionImage}
                   resizeMode="cover"
                 />
@@ -417,14 +429,14 @@ export default function WorkoutsScreen({ navigation }: any) {
                 mobilityFavorites.map((item) => {
                   // Badge color logic
                   let levelColor = '#dbeafe', levelTextColor = '#2563eb';
-                  if (item.difficulty === 'beginner') {
-                    levelColor = '#ecfdf5'; levelTextColor = '#059669';
-                  } else if (item.difficulty === 'intermediate') {
-                    levelColor = '#fff7ed'; levelTextColor = '#ea580c';
-                  } else if (item.difficulty === 'advanced') {
-                    levelColor = '#fee2e2'; levelTextColor = '#dc2626';
-                  } else if (item.difficulty === 'all levels') {
-                    levelColor = '#dbeafe'; levelTextColor = '#2563eb';
+                  if (item.difficulty?.toLowerCase() === 'beginner') {
+                    levelColor = '#ecfdf5'; levelTextColor = '#059669'; // green
+                  } else if (item.difficulty?.toLowerCase() === 'intermediate') {
+                    levelColor = '#fff7ed'; levelTextColor = '#ea580c'; // orange
+                  } else if (item.difficulty?.toLowerCase() === 'advanced') {
+                    levelColor = '#fee2e2'; levelTextColor = '#dc2626'; // red
+                  } else if (item.difficulty?.toLowerCase() === 'all levels') {
+                    levelColor = '#dbeafe'; levelTextColor = '#2563eb'; // blue
                   }
                   return (
                     <Card key={item.id} style={styles.videoCard}>
@@ -455,7 +467,9 @@ export default function WorkoutsScreen({ navigation }: any) {
                           <Typography.Body style={styles.videoCardTitle}>{item.title}</Typography.Body>
                           <Typography.Subtext style={styles.videoCardDesc}>{item.description || ''}</Typography.Subtext>
                           <View style={styles.videoCardMetaRow}>
-                            <Text style={[styles.videoCardLevel, { backgroundColor: levelColor, color: levelTextColor }]}>{item.difficulty ? item.difficulty.charAt(0).toUpperCase() + item.difficulty.slice(1) : 'All Levels'}</Text>
+                            <Text style={[styles.videoCardLevel, { backgroundColor: levelColor, color: levelTextColor }]}> 
+                              {item.difficulty ? item.difficulty.charAt(0).toUpperCase() + item.difficulty.slice(1) : 'All Levels'}
+                            </Text>
                             <Text style={styles.videoCardRating}>{item.duration ? `${item.duration} min` : ''}</Text>
                           </View>
                         </View>

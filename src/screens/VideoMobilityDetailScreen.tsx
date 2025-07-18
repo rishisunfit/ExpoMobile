@@ -24,18 +24,69 @@ const MOCK_VIDEO = {
   ],
 };
 
-export default function VideoMobilityDetailScreen({ navigation }: any) {
+export default function VideoMobilityDetailScreen({ route, navigation }: any) {
   const [notes, setNotes] = useState('');
   const [rating, setRating] = useState(0);
+
+  // Get video from navigation params, fallback to MOCK_VIDEO
+  const video = route?.params?.video || MOCK_VIDEO;
 
   // Helper to extract YouTube ID
   function extractYouTubeId(url: string) {
     const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/))([\w-]{11})/);
     return match ? match[1] : '';
   }
+  // Helper to detect YouTube or Vimeo
+  function getVideoType(url: string) {
+    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
+    if (url.includes('vimeo.com')) return 'vimeo';
+    return 'unknown';
+  }
+  // Extract Vimeo video ID and privacy token (if present)
+  function extractVimeoEmbedInfo(url: string) {
+    const match = url.match(/(?:vimeo\.com\/(?:video\/)?)(\d+)(?:\/(\w+))?/);
+    if (!match) return null;
+    return { id: match[1], token: match[2] };
+  }
 
-  // Video player logic (YouTube only for now)
-  const videoId = extractYouTubeId(MOCK_VIDEO.video_url);
+  // Video player logic
+  const type = getVideoType(video.video_url);
+  let videoPlayer = null;
+  if (type === 'youtube') {
+    const videoId = extractYouTubeId(video.video_url);
+    videoPlayer = videoId ? (
+      <YoutubePlayer
+        height={220}
+        width={width}
+        videoId={videoId}
+        play={false}
+        webViewStyle={{ borderRadius: 0, overflow: 'hidden' }}
+        initialPlayerParams={{ controls: true, modestbranding: true }}
+      />
+    ) : (
+      <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: '#fff' }}>Video not available</Text>
+      </View>
+    );
+  } else if (type === 'vimeo') {
+    const embedInfo = extractVimeoEmbedInfo(video.video_url);
+    if (embedInfo && embedInfo.id) {
+      const embedUrl = embedInfo.token
+        ? `https://player.vimeo.com/video/${embedInfo.id}?h=${embedInfo.token}`
+        : `https://player.vimeo.com/video/${embedInfo.id}`;
+      videoPlayer = (
+        <WebView
+          source={{ uri: embedUrl }}
+          style={{ width: width, height: 220, borderRadius: 0, overflow: 'hidden', backgroundColor: '#000' }}
+          allowsFullscreenVideo
+        />
+      );
+    } else {
+      videoPlayer = <Text style={{ color: 'red', textAlign: 'center' }}>Invalid Vimeo URL: {video.video_url}</Text>;
+    }
+  } else {
+    videoPlayer = <Text>Unsupported video type.</Text>;
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }}>
@@ -44,7 +95,7 @@ export default function VideoMobilityDetailScreen({ navigation }: any) {
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
           <Icon name="arrow-left" size={20} color="#374151" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{MOCK_VIDEO.title}</Text>
+        <Text style={styles.headerTitle}>{video.title}</Text>
         <TouchableOpacity style={styles.headerBtn}>
           <Icon name="share" size={20} color="#374151" />
         </TouchableOpacity>
@@ -54,49 +105,43 @@ export default function VideoMobilityDetailScreen({ navigation }: any) {
         {/* Video Section */}
         <View style={styles.videoSection}>
           <View style={styles.aspectVideo}>
-            {videoId ? (
-              <YoutubePlayer
-                height={220}
-                width={width}
-                videoId={videoId}
-                play={false}
-                webViewStyle={{ borderRadius: 0, overflow: 'hidden' }}
-                initialPlayerParams={{ controls: true, modestbranding: true }}
-              />
-            ) : (
-              <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ color: '#fff' }}>Video not available</Text>
-              </View>
-            )}
+            {videoPlayer}
             <View style={styles.durationBadge}>
-              <Text style={styles.durationBadgeText}>{MOCK_VIDEO.duration} min</Text>
+              <Text style={styles.durationBadgeText}>{video.duration} min</Text>
             </View>
           </View>
         </View>
 
         {/* Workout Info */}
         <View style={styles.infoSection}>
-          <Text style={styles.infoTitle}>{MOCK_VIDEO.title}</Text>
-          <Text style={styles.infoDesc}>{MOCK_VIDEO.description}</Text>
+          <Text style={styles.infoTitle}>{video.title}</Text>
+          <Text style={styles.infoDesc}>{video.description}</Text>
           <View style={styles.badgeRow}>
+            {video.difficulty && (
             <View style={[styles.badge, { backgroundColor: '#dcfce7' }]}> 
-              <Text style={[styles.badgeText, { color: '#16a34a' }]}>{MOCK_VIDEO.difficulty}</Text>
+                <Text style={[styles.badgeText, { color: '#16a34a' }]}>{video.difficulty}</Text>
             </View>
+            )}
+            {video.duration && (
             <View style={[styles.badge, { backgroundColor: '#f3f4f6' }]}> 
-              <Text style={[styles.badgeText, { color: '#374151' }]}>{MOCK_VIDEO.duration} min</Text>
+                <Text style={[styles.badgeText, { color: '#374151' }]}>{video.duration} min</Text>
             </View>
+            )}
+            {video.category && (
             <View style={[styles.badge, { backgroundColor: '#f3f4f6' }]}> 
-              <Text style={[styles.badgeText, { color: '#374151' }]}>{MOCK_VIDEO.category}</Text>
+                <Text style={[styles.badgeText, { color: '#374151' }]}>{video.category}</Text>
             </View>
+            )}
           </View>
         </View>
 
         {/* Exercise Breakdown */}
+        {video.breakdown && (
         <View style={styles.sectionPad}>
           <View style={styles.breakdownCard}>
             <Text style={styles.breakdownTitle}>Exercise Breakdown</Text>
             <View style={{ marginTop: 8 }}>
-              {MOCK_VIDEO.breakdown.map((ex, i) => (
+                {video.breakdown.map((ex: any, i: number) => (
                 <View key={i} style={styles.breakdownRow}>
                   <View style={styles.breakdownNumCircle}>
                     <Text style={styles.breakdownNum}>{i + 1}</Text>
@@ -108,6 +153,7 @@ export default function VideoMobilityDetailScreen({ navigation }: any) {
             </View>
           </View>
         </View>
+        )}
 
         {/* Notes Section */}
         <View style={styles.sectionPad}>

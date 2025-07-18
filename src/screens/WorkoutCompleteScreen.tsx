@@ -33,19 +33,18 @@ export default function WorkoutCompleteScreen({ route, navigation }: any) {
 
     setLoading(true);
     try {
-      const enrichedLogs = setLogs.map(log => ({
-        ...log,
+      const enrichedLogs = setLogs.map((log: any) => ({
         client_id: user.id,
         workout_id: workoutId,
         program_id: programId,
         day: day,
-        // exercise_id: log.exerciseId, // Make sure this is the UUID from your exercise library!
-        // set_number: log.setNumber,
-        // reps: log.reps,
-        // weight: log.weight,
-        // notes: log.notes,
+        exercise_id: log.exerciseId, // required
+        set_number: log.setNumber,   // required
+        reps: log.reps !== undefined ? parseInt(log.reps, 10) : null, // as number
+        weight: log.weight !== undefined ? parseFloat(log.weight) : null, // as number
+        notes: log.notes || null,
       }));
-      const { data, error } = await supabase
+      const { data: workoutData, error: workoutError } = await supabase
         .from('completed_workouts')
         .insert({
           client_id: user.id,
@@ -55,8 +54,8 @@ export default function WorkoutCompleteScreen({ route, navigation }: any) {
           notes: notes.trim() || null
         });
 
-      if (error) {
-        if (error.code === '23505') {
+      if (workoutError) {
+        if (workoutError.code === '23505') {
           // Unique constraint violation - already completed today
           Alert.alert(
             'Workout Already Completed',
@@ -67,13 +66,13 @@ export default function WorkoutCompleteScreen({ route, navigation }: any) {
             ]
           );
         } else {
-          Alert.alert('Error', `Failed to save workout completion: ${error.message}`);
+          Alert.alert('Error', `Failed to save workout completion: ${workoutError.message}`);
         }
       } else {
-        await supabase.from('completed_exercise_logs').insert(enrichedLogs);
-        if (error) {
-          console.error('Supabase insert error:', error);
-          Alert.alert('Error', 'An unexpected error occurred while saving your workout');
+        const { error: logsError } = await supabase.from('completed_exercise_logs').insert(enrichedLogs);
+        if (logsError) {
+          console.error('Supabase insert error:', logsError);
+          Alert.alert('Error', 'An unexpected error occurred while saving your workout logs');
         } else {
           Alert.alert(
             'Workout Completed!',

@@ -17,6 +17,8 @@ interface ExerciseDetailComponentProps {
   onSetComplete?: (setLog: any) => void;
   allSetLogs?: any[];
   fullWorkoutExercises?: any[];
+  showFinalNavigation?: boolean;
+  onCompleteWorkout?: () => void;
 }
 
 export function ExerciseDetailComponent({
@@ -28,6 +30,8 @@ export function ExerciseDetailComponent({
   onSetComplete,
   allSetLogs,
   fullWorkoutExercises,
+  showFinalNavigation,
+  onCompleteWorkout,
 }: ExerciseDetailComponentProps) {
   const [currentSet, setCurrentSet] = useState(1);
   const [setsData, setSetsData] = useState<Array<{weight: string, reps: string, notes: string}>>([]);
@@ -76,7 +80,18 @@ export function ExerciseDetailComponent({
         ...setsData[currentSet - 1],
       });
     }
-    if (currentSet < numberOfSets) {
+    // Propagate completed set's weight/reps to next set as placeholder if not already filled
+    if (currentSet < setsData.length) {
+      setSetsData(prev => {
+        const newSets = [...prev];
+        const completed = prev[currentSet - 1];
+        const next = newSets[currentSet] || { weight: '', reps: '', notes: '' };
+        // Only set if not already filled
+        if (!next.weight) next.weight = completed.weight;
+        if (!next.reps) next.reps = completed.reps;
+        newSets[currentSet] = next;
+        return newSets;
+      });
       setCurrentSet(currentSet + 1);
     } else {
       onNextExercise?.();
@@ -165,7 +180,7 @@ export function ExerciseDetailComponent({
           <View style={styles.headerRight}>
             <TouchableOpacity style={styles.tutorialButton}>
               <Icon name="play" size={12} color={COLORS.primary} style={{ marginRight: 8 }} />
-              <Text style={styles.tutorialButtonText}>Full Video Tutorial</Text>
+              <Text style={styles.tutorialButtonText}>Exercise Tutorial</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.timerButton}>
               <Text style={styles.timerEmoji}>⏱️</Text>
@@ -211,14 +226,11 @@ export function ExerciseDetailComponent({
 
         {/* Sets Section */}
         <View style={styles.setsSection}>
-          {Array.from({ length: numberOfSets }, (_, index) => {
-            const setNumber = index + 1;
-            const setIndex = index;
+          {setsData.map((setData, setIndex) => {
+            const setNumber = setIndex + 1;
             const isCurrentSet = setNumber === currentSet;
             const isUpcoming = setNumber > currentSet;
             const isCompleted = setNumber < currentSet;
-            const setData = setsData[setIndex] || { weight: '', reps: '', notes: '' };
-
             return (
               <Card key={setNumber} style={[styles.setCard, isUpcoming && styles.disabledCard].filter(Boolean)}>
                 <View style={styles.setHeader}>
@@ -252,7 +264,7 @@ export function ExerciseDetailComponent({
                       onChangeText={isCurrentSet ? (text) => handleSetDataChange(setIndex, 'weight', text) : undefined}
                       keyboardType="numeric"
                       editable={isCurrentSet}
-                      placeholder="-"
+                      placeholder={isUpcoming && setIndex > 0 ? setsData[setIndex-1]?.weight || '-' : '-'}
                     />
                   </View>
                   <View style={styles.inputGroup}>
@@ -263,6 +275,13 @@ export function ExerciseDetailComponent({
                       onChangeText={isCurrentSet ? (text) => handleSetDataChange(setIndex, 'reps', text) : undefined}
                       keyboardType="numeric"
                       editable={isCurrentSet}
+                      placeholder={
+                        isUpcoming && setIndex > 0
+                          ? (setsData[setIndex-1]?.reps && setsData[setIndex-1]?.reps !== getRepsForSet(setNumber-1)
+                              ? setsData[setIndex-1]?.reps
+                              : getRepsForSet(setNumber))
+                          : getRepsForSet(setNumber)
+                      }
                     />
                   </View>
                 </View>
@@ -289,20 +308,63 @@ export function ExerciseDetailComponent({
             );
           })}
 
+          {/* Add Set Button */}
+          <TouchableOpacity
+            style={styles.addSetBtn}
+            onPress={() => {
+              setSetsData(prev => {
+                const newSets = [...prev];
+                const newSetNumber = newSets.length + 1;
+                let reps = '';
+                if (newSets.length > 0 && newSets[newSets.length - 1].reps) {
+                  reps = newSets[newSets.length - 1].reps;
+                } else {
+                  reps = getRepsForSet(newSetNumber);
+                }
+                newSets.push({ weight: '', reps, notes: '' });
+                return newSets;
+              });
+            }}
+          >
+            <Text style={styles.addSetBtnText}>+ Add Set</Text>
+          </TouchableOpacity>
+
           {/* Navigation Buttons */}
           <View style={styles.navigationSection}>
-            {!isFirstExercise && (
-              <TouchableOpacity style={styles.navButton} onPress={onPreviousExercise}>
-                <Icon name="chevron-left" size={16} color={COLORS.primary} />
-                <Text style={styles.navButtonText}>Previous Exercise</Text>
-              </TouchableOpacity>
-            )}
-            
-            {!isLastExercise && (
-              <TouchableOpacity style={styles.nextButton} onPress={onNextExercise}>
-                <Text style={styles.nextButtonText}>Next Exercise</Text>
-                <Icon name="chevron-right" size={16} color="#fff" />
-              </TouchableOpacity>
+            {showFinalNavigation ? (
+              <>
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-start', gap: 12 }}>
+                  {onPreviousExercise && (
+                    <TouchableOpacity style={styles.navButton} onPress={onPreviousExercise}>
+                      <Icon name="chevron-left" size={16} color={COLORS.primary} />
+                      <Text style={styles.navButtonText}>Previous Exercise</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {onCompleteWorkout && (
+                  <View style={{ marginTop: 16, alignItems: 'center' }}>
+                    <TouchableOpacity style={[styles.nextButton, { minWidth: 220, justifyContent: 'center' }]} onPress={onCompleteWorkout}>
+                      <Text style={styles.nextButtonText}>Complete Workout</Text>
+                      <Icon name="check" size={16} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            ) : (
+              <>
+                {onPreviousExercise && (
+                  <TouchableOpacity style={styles.navButton} onPress={onPreviousExercise}>
+                    <Icon name="chevron-left" size={16} color={COLORS.primary} />
+                    <Text style={styles.navButtonText}>Previous Exercise</Text>
+                  </TouchableOpacity>
+                )}
+                {!isLastExercise && (
+                  <TouchableOpacity style={styles.nextButton} onPress={onNextExercise}>
+                    <Text style={styles.nextButtonText}>Next Exercise</Text>
+                    <Icon name="chevron-right" size={16} color="#fff" />
+                  </TouchableOpacity>
+                )}
+              </>
             )}
           </View>
 
@@ -622,5 +684,27 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  addSetBtn: {
+    marginTop: 16,
+    alignSelf: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 999,
+    paddingHorizontal: 36,
+    paddingVertical: 14,
+    minWidth: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  addSetBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 18,
+    letterSpacing: 0.5,
   },
 }); 

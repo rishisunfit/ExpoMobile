@@ -1,12 +1,63 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome6';
 // @ts-ignore
 // eslint-disable-next-line import/no-unresolved
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../styles';
+import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen({ navigation }: any) {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+        if (authError) {
+          console.error('Error fetching auth user:', authError);
+          return;
+        }
+
+        if (authUser) {
+          // Fetch user profile data from users table
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', authUser.id)
+            .single();
+
+          if (userError) {
+            console.error('Error fetching user data:', userError);
+            // Fallback to auth user data
+            setUser({
+              full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+              email: authUser.email,
+              created_at: authUser.created_at
+            });
+          } else {
+            setUser(userData);
+          }
+        }
+      } catch (error) {
+        console.error('Error in fetchUser:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUser();
+  }, []);
+
+  const formatMemberSince = (createdAt: string) => {
+    if (!createdAt) return 'Member since recently';
+    const date = new Date(createdAt);
+    const month = date.toLocaleDateString('en-US', { month: 'long' });
+    const year = date.getFullYear();
+    return `Member since ${month} ${year}`;
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 96 }}>
@@ -18,8 +69,12 @@ export default function ProfileScreen({ navigation }: any) {
               style={styles.profileImage}
             />
             <View style={{ flex: 1, marginLeft: 16 }}>
-              <Text style={styles.profileName}>Sarah Johnson</Text>
-              <Text style={styles.profileMemberSince}>Member since March 2024</Text>
+              <Text style={styles.profileName}>
+                {loading ? 'Loading...' : (user?.full_name || 'User')}
+              </Text>
+              <Text style={styles.profileMemberSince}>
+                {loading ? 'Loading...' : formatMemberSince(user?.created_at)}
+              </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                 <View style={styles.levelBadge}><Text style={styles.levelBadgeText}>Intermediate</Text></View>
                 <View style={styles.premiumBadge}><Text style={styles.premiumBadgeText}>Premium</Text></View>

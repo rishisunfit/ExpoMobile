@@ -5,14 +5,13 @@ import { Typography } from './common/Typography';
 import Icon from 'react-native-vector-icons/FontAwesome6';
 import { COLORS, SPACING } from '../styles';
 import { Video, ResizeMode } from 'expo-av';
-import type { Exercise } from '../types/Exercise';
 import { SHADOWS } from '../styles/shadows';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
 interface SupersetExerciseComponentProps {
-  exercises: Exercise[];
+  exercises: any[];
   currentExerciseIndex: number;
   onNextExercise?: () => void;
   onPreviousExercise?: () => void;
@@ -24,6 +23,8 @@ interface SupersetExerciseComponentProps {
   isLastGroup?: boolean;
   blockType?: 'circuit' | 'superset';
   onSelectExercise?: (index: number) => void;
+  showFinalNavigation?: boolean;
+  onCompleteWorkout?: () => void;
 }
 
 export function SupersetExerciseComponent({
@@ -39,18 +40,24 @@ export function SupersetExerciseComponent({
   isLastGroup = false,
   blockType = 'circuit',
   onSelectExercise,
+  showFinalNavigation,
+  onCompleteWorkout,
 }: SupersetExerciseComponentProps) {
   const [currentRound, setCurrentRound] = useState(1);
   const [editingRoundIndex, setEditingRoundIndex] = useState<number | null>(null);
-  const [allSetsData, setAllSetsData] = useState<Array<Array<{weight: string, reps: string, notes: string}>>>([]);
+  type SetData = { weight: string; reps: string; notes: string; added?: boolean };
+  const [allSetsData, setAllSetsData] = useState<Array<Array<SetData>>>([]);
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
   const [notes, setNotes] = useState('');
   const videoRef = useRef(null);
+  // Add state to track expanded exercise
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   const accentColor = blockType === 'superset' ? COLORS.secondary : COLORS.accent;
-  const accentColorLight = blockType === 'superset' ? COLORS.status.good : `${COLORS.accent}20`;
-  const editButtonBackgroundColor = blockType === 'superset' ? '#dbeafe' : '#ede9fe'; // light blue or light purple
+  // Use blue for superset, purple for circuit
+  const accentColorLight = blockType === 'superset' ? '#dbeafe' : '#ede9fe';
+  const editButtonBackgroundColor = accentColorLight;
 
   const currentExercise = exercises[currentExerciseIndex];
   const isFirstExercise = currentExerciseIndex === 0;
@@ -79,7 +86,7 @@ export function SupersetExerciseComponent({
     return forExercise?.reps?.toString() || '';
   };
 
-  const handleSetDataChange = (exerciseIndex: number, roundIndex: number, field: string, value: string) => {
+  const handleSetDataChange = (exerciseIndex: number, roundIndex: number, field: 'weight' | 'reps' | 'notes', value: string) => {
     const newAllSetsData = [...allSetsData];
     if (newAllSetsData[exerciseIndex] && newAllSetsData[exerciseIndex][roundIndex]) {
         newAllSetsData[exerciseIndex][roundIndex][field] = value;
@@ -135,10 +142,14 @@ export function SupersetExerciseComponent({
               <Typography.Subtext>{exercises.length} exercises • {totalDuration}</Typography.Subtext>
             </View>
           </View>
-          <View style={[styles.circuitModeBadge, { backgroundColor: accentColorLight }]}>
-            <Text style={[styles.circuitModeText, { color: accentColor }]}>
-              {blockType === 'superset' ? 'Superset Mode' : 'Circuit Mode'}
-            </Text>
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={[styles.tutorialButton, { backgroundColor: accentColorLight }]}> 
+              <Icon name="play" size={12} color={accentColor} style={{ marginRight: 8 }} />
+              <Text style={[styles.tutorialButtonText, { color: accentColor }]}>Exercise Tutorial</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.timerButton}>
+              <Text style={[styles.timerEmoji, { color: accentColor }]}>⏱️</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -210,191 +221,122 @@ export function SupersetExerciseComponent({
         {/* Circuit Overview */}
         <View style={styles.circuitOverview}>
           <Typography.H2 style={styles.overviewTitle}>Circuit Overview</Typography.H2>
-          
           {exercises.map((exercise, index) => {
-            const isCurrent = index === currentExerciseIndex;
-            const isCompleted = exercise.isCompleted;
-            
-            const cardStyle = [
-              styles.exerciseCard,
-              ...(isCurrent ? [styles.currentExerciseCard, { backgroundColor: accentColorLight, borderColor: accentColor }] : []),
-              ...(isCompleted ? [styles.completedExerciseCard] : [])
-            ];
-            
+            const isExpanded = expandedIndex === index;
+            const numberOfSets = exercise.rounds || 3;
+            const sets = allSetsData[index] || Array.from({ length: numberOfSets }, () => ({ weight: '', reps: '', notes: '' }));
+            const summary = `${exercise.name}  ${numberOfSets}x${sets[0]?.reps || ''} @ ${sets[0]?.weight || ''} lbs`;
             return (
-              <TouchableOpacity
-                key={exercise.id}
-                onPress={() => {
-                    onSelectExercise?.(index);
-                    setEditingRoundIndex(null);
-                }}
-                disabled={isCurrent}
-              >
-                <Card 
-                  style={cardStyle}
+              <Card key={exercise.id} style={[styles.exerciseCard, isExpanded && [{...styles.expandedCard, borderColor: accentColor}]]}> 
+                <TouchableOpacity
+                  onPress={() => setExpandedIndex(isExpanded ? null : index)}
+                  style={styles.exerciseSummaryRow}
+                  activeOpacity={0.8}
                 >
-                  <View style={styles.exerciseCardHeader}>
-                    <View style={[
-                      styles.exerciseNumber,
-                      isCurrent && [styles.currentExerciseNumber, { backgroundColor: accentColor }],
-                      isCompleted && styles.completedExerciseNumber
-                    ]}>
-                      {isCompleted ? (
-                        <Icon name="check" size={16} color="#fff" />
-                      ) : (
-                        <Text style={[
-                          styles.exerciseNumberText,
-                          isCurrent && styles.currentExerciseNumberText
-                        ]}>
-                          {index + 1}
-                        </Text>
-                      )}
-                    </View>
-                    
-                    <View style={styles.exerciseCardContent}>
-                      <Typography.H2 style={styles.exerciseCardName}>{exercise.name}</Typography.H2>
-                      <Typography.Subtext>
-                        {exercise.duration || '45 seconds'} • {exercise.rounds || 3} rounds
-                      </Typography.Subtext>
-                    </View>
-                    
-                    {isCurrent && (
-                      <View style={[styles.currentBadge, { backgroundColor: accentColor }]}>
-                        <Text style={styles.currentBadgeText}>Current</Text>
+                  <Text style={styles.exerciseSummaryText}>{summary}</Text>
+                  <Icon name={isExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={COLORS.text.secondary} />
+                </TouchableOpacity>
+                {isExpanded && (
+                  <View style={styles.setsStepperContainer}>
+                    {sets.map((set, setIdx) => (
+                      <View key={setIdx} style={styles.stepperSetRow}>
+                        <View style={[styles.stepperSetNumber, { backgroundColor: accentColor }]}><Text style={styles.stepperSetNumberText}>{setIdx + 1}</Text></View>
+                        <TextInput
+                          style={styles.stepperInput}
+                          value={set.weight}
+                          onChangeText={text => handleSetDataChange(index, setIdx, 'weight', text)}
+                          placeholder="Weight"
+                          keyboardType="numeric"
+                        />
+                        <Text style={styles.stepperX}>x</Text>
+                        <TextInput
+                          style={styles.stepperInput}
+                          value={set.reps}
+                          onChangeText={text => handleSetDataChange(index, setIdx, 'reps', text)}
+                          placeholder="Reps"
+                          keyboardType="numeric"
+                        />
+                        <TouchableOpacity style={styles.stepperNotesBtn} onPress={() => {}}>
+                          <Icon name="sticky-note" size={16} color={COLORS.text.secondary} />
+                        </TouchableOpacity>
+                        {set.added && (
+                          <TouchableOpacity
+                            style={styles.removeSetBtn}
+                            onPress={() => {
+                              setAllSetsData(prev => {
+                                const newSets = [...prev];
+                                newSets[index] = newSets[index].filter((_, i) => i !== setIdx);
+                                return newSets;
+                              });
+                            }}
+                          >
+                            <View style={styles.removeSetCircle}>
+                              <Icon name="minus" size={14} color="#fff" />
+                            </View>
+                          </TouchableOpacity>
+                        )}
                       </View>
-                    )}
-                    
-                    {!isCurrent && !isCompleted && (
-                      <TouchableOpacity style={styles.playButtonSmall}>
-                        <Icon name="play" size={12} color={COLORS.text.secondary} />
-                      </TouchableOpacity>
-                    )}
+                    ))}
+                    <TouchableOpacity style={styles.addSetBtn} onPress={() => {
+                      setAllSetsData(prev => {
+                        const newSets = [...prev];
+                        const currentSets = newSets[index] || [];
+                        const newSetNumber = currentSets.length + 1;
+                        let reps = '';
+                        if (currentSets.length > 0 && currentSets[currentSets.length - 1].reps) {
+                          reps = currentSets[currentSets.length - 1].reps;
+                        } else {
+                          reps = getRepsForSet(newSetNumber, exercise);
+                        }
+                        newSets[index] = [...currentSets, { weight: '', reps, notes: '', added: true }];
+                        return newSets;
+                      });
+                    }}>
+                      <Icon name="plus" size={16} color={accentColor} />
+                      <Text style={[styles.addSetBtnText, { color: accentColor }]}>Add Set</Text>
+                    </TouchableOpacity>
                   </View>
-
-                  {/* Show sets for current exercise */}
-                  {isCurrent && (
-                    <View style={styles.setsContainer}>
-                      {Array.from({ length: numberOfSets }, (_, roundIndex) => {
-                        const roundNumber = roundIndex + 1;
-                        const isCurrentRound = roundNumber === currentRound;
-                        const isUpcoming = roundNumber > currentRound;
-                        const isCompleted = roundNumber < currentRound;
-                        const isEditingThisRound = editingRoundIndex === roundIndex;
-                        const setData = allSetsData[currentExerciseIndex]?.[roundIndex] || { weight: '', reps: ''};
-                        
-                        return (
-                          <View key={roundNumber} style={[
-                            styles.setCard,
-                            isCurrentRound && [styles.currentSetCard, { borderColor: accentColor }],
-                            isUpcoming && styles.upcomingSetCard,
-                            isCompleted && styles.completedSetCard,
-                            isEditingThisRound && styles.editingSetCard,
-                          ]}>
-                            <View style={styles.setHeader}>
-                              <Text style={styles.setTitle}>Round {roundNumber}</Text>
-                              {isCompleted ? (
-                                <TouchableOpacity
-                                  style={[
-                                    styles.sleekEditButton,
-                                    { backgroundColor: isEditingThisRound ? COLORS.error : editButtonBackgroundColor }
-                                  ]}
-                                  onPress={() => handleEditSet(roundIndex)}
-                                >
-                                    <Icon 
-                                      name={isEditingThisRound ? "check" : "pencil"} 
-                                      size={12} 
-                                      color={isEditingThisRound ? '#fff' : accentColor} 
-                                      style={{ marginRight: 6 }}
-                                    />
-                                    <Text style={[
-                                      styles.sleekEditButtonText,
-                                      { color: isEditingThisRound ? '#fff' : accentColor }
-                                    ]}>
-                                      {isEditingThisRound ? "Save Changes" : "Edit"}
-                                    </Text>
-                                </TouchableOpacity>
-                              ) : (
-                                <View style={[styles.setStatus,
-                                  isCurrentRound && [styles.currentSetStatus, { backgroundColor: accentColor }],
-                                  isUpcoming && styles.upcomingSetStatus,
-                                ]}>
-                                  <Text style={[styles.setStatusText,
-                                    isCurrentRound && styles.currentSetStatusText,
-                                    isUpcoming && styles.upcomingSetStatusText,
-                                  ]}>
-                                    {isCurrentRound ? 'Active' : 'Upcoming'}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                            
-                            <View style={styles.setInputs}>
-                              <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Weight (lbs)</Text>
-                                <TextInput
-                                  style={[ styles.input, !(isCurrentRound || isEditingThisRound) && styles.disabledInput ]}
-                                  value={setData.weight}
-                                  onChangeText={(text) => handleSetDataChange(currentExerciseIndex, roundIndex, 'weight', text)}
-                                  keyboardType="numeric"
-                                  editable={isCurrentRound || isEditingThisRound}
-                                  placeholder="0"
-                                />
-                              </View>
-                              <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Reps</Text>
-                                <TextInput
-                                  style={[ styles.input, !(isCurrentRound || isEditingThisRound) && styles.disabledInput ]}
-                                  value={setData.reps}
-                                  onChangeText={(text) => handleSetDataChange(currentExerciseIndex, roundIndex, 'reps', text)}
-                                  keyboardType="numeric"
-                                  editable={isCurrentRound || isEditingThisRound}
-                                  placeholder="0"
-                                />
-                              </View>
-                            </View>
-                          </View>
-                        );
-                      })}
-
-                      <TouchableOpacity style={[styles.nextInGroupButton, {backgroundColor: accentColor}]} onPress={handleCompleteAndGoToNextInGroup}>
-                          <Text style={styles.nextInGroupButtonText}>Next Exercise in {blockType === 'superset' ? 'Superset' : 'Circuit'}</Text>
-                          <Icon name="arrow-right" size={14} color="#fff" />
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </Card>
-              </TouchableOpacity>
+                )}
+              </Card>
             );
           })}
-
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={[styles.completeSetButton, { backgroundColor: accentColor }]} onPress={handleCompleteSet}>
-              <Text style={styles.completeSetButtonText}>Complete Set</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.skipButton} onPress={handleSkipToNext}>
-              <Text style={styles.skipButtonText}>Skip to Next Exercise</Text>
-            </TouchableOpacity>
-          </View>
+        </View>
 
           {/* Navigation Buttons */}
           <View style={styles.navigationSection}>
-            {!isLastGroup && (
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <TouchableOpacity style={[styles.prevButton, { backgroundColor: accentColor, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20 }]} onPress={onPreviousExercise}>
-                  <Icon name="chevron-left" size={16} color="#fff" />
-                  <Text style={styles.nextButtonText}>Previous Exercise</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.nextButton, { backgroundColor: accentColor }]} onPress={onFinishGroup}>
-                  <Text style={styles.nextButtonText}>Next Exercise</Text>
-                  <Icon name="chevron-right" size={16} color="#fff" />
-                </TouchableOpacity>
+            {showFinalNavigation ? (
+              <View style={{ alignItems: 'center', width: '100%' }}>
+                {onPreviousExercise && (
+                  <TouchableOpacity style={styles.navButton} onPress={onPreviousExercise}>
+                    <Icon name="chevron-left" size={16} color={accentColor} />
+                    <Text style={[styles.navButtonText, { color: accentColor }]}>Previous Exercise</Text>
+                  </TouchableOpacity>
+                )}
+                {onCompleteWorkout && (
+                  <TouchableOpacity style={[styles.nextButton, { minWidth: 220, justifyContent: 'center', marginTop: 16, alignSelf: 'center', backgroundColor: accentColor }]} onPress={onCompleteWorkout}>
+                    <Text style={styles.nextButtonText}>Complete Workout</Text>
+                    <Icon name="check" size={16} color="#fff" />
+                  </TouchableOpacity>
+                )}
               </View>
-            )}
+            ) :
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {onPreviousExercise && (
+                  <TouchableOpacity style={styles.navButton} onPress={onPreviousExercise}>
+                    <Icon name="chevron-left" size={16} color={accentColor} />
+                    <Text style={[styles.navButtonText, { color: accentColor }]}>Previous Exercise</Text>
+                  </TouchableOpacity>
+                )}
+                {onFinishGroup && !isLastGroup && (
+                  <TouchableOpacity style={[styles.nextButton, { backgroundColor: accentColor }]} onPress={onFinishGroup}>
+                    <Text style={styles.nextButtonText}>Next Exercise</Text>
+                    <Icon name="chevron-right" size={16} color="#fff" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            }
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
     </View>
   );
 }
@@ -427,6 +369,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f5f9',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tutorialButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tutorialButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  timerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timerEmoji: {
+    fontSize: 20,
   },
   circuitModeBadge: {
     paddingHorizontal: 12,
@@ -779,5 +748,107 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 20,
+  },
+  navButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    gap: 8,
+    marginBottom: 0,
+  },
+  navButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  expandedCard: {
+    borderWidth: 2,
+    // Use accentColor for border (purple for circuit, blue for superset)
+    borderColor: undefined, // will be set inline
+    backgroundColor: '#f8fafc',
+  },
+  exerciseSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+  },
+  exerciseSummaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+  },
+  setsStepperContainer: {
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 8,
+  },
+  stepperSetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  stepperSetNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: undefined, // will be set inline
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperSetNumberText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  stepperInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 14,
+    minWidth: 48,
+    textAlign: 'center',
+    backgroundColor: '#fff',
+  },
+  stepperX: {
+    fontWeight: '700',
+    fontSize: 16,
+    color: COLORS.text.secondary,
+  },
+  stepperNotesBtn: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  addSetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  addSetBtnText: {
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  removeSetBtn: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  removeSetCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
   },
 }); 

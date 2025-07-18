@@ -7,8 +7,133 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instanciate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "12.2.3 (519615d)"
+  }
   public: {
     Tables: {
+      client_program_days: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          day: number
+          id: string
+          is_rest_day: boolean | null
+          notes: string | null
+          position: number | null
+          program_id: string
+          tags: string[] | null
+          workout_id: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          day: number
+          id?: string
+          is_rest_day?: boolean | null
+          notes?: string | null
+          position?: number | null
+          program_id: string
+          tags?: string[] | null
+          workout_id?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          day?: number
+          id?: string
+          is_rest_day?: boolean | null
+          notes?: string | null
+          position?: number | null
+          program_id?: string
+          tags?: string[] | null
+          workout_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_program_days_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_program_days_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_program_days_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "full_program_structure"
+            referencedColumns: ["workout_id"]
+          },
+          {
+            foreignKeyName: "client_program_days_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_schedule: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          date: string
+          id: string
+          is_rest_day: boolean | null
+          notes: string | null
+          workout_id: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          date: string
+          id?: string
+          is_rest_day?: boolean | null
+          notes?: string | null
+          workout_id?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          date?: string
+          id?: string
+          is_rest_day?: boolean | null
+          notes?: string | null
+          workout_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_schedule_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_schedule_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "full_program_structure"
+            referencedColumns: ["workout_id"]
+          },
+          {
+            foreignKeyName: "client_schedule_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       completed_exercise_logs: {
         Row: {
           client_id: string
@@ -91,6 +216,7 @@ export type Database = {
         Row: {
           client_id: string
           completed_at: string | null
+          completed_date: string | null
           day: number
           id: string
           notes: string | null
@@ -100,6 +226,7 @@ export type Database = {
         Insert: {
           client_id: string
           completed_at?: string | null
+          completed_date?: string | null
           day: number
           id?: string
           notes?: string | null
@@ -109,6 +236,7 @@ export type Database = {
         Update: {
           client_id?: string
           completed_at?: string | null
+          completed_date?: string | null
           day?: number
           id?: string
           notes?: string | null
@@ -189,11 +317,13 @@ export type Database = {
         Row: {
           coach_id: string | null
           created_at: string | null
+          cues_and_tips: string | null
           default_unit: string | null
           difficulty: string | null
           equipment: string | null
           exercise_type: string | null
           id: string
+          image: string | null
           instructions: string | null
           is_active: boolean | null
           is_draft: boolean | null
@@ -210,11 +340,13 @@ export type Database = {
         Insert: {
           coach_id?: string | null
           created_at?: string | null
+          cues_and_tips?: string | null
           default_unit?: string | null
           difficulty?: string | null
           equipment?: string | null
           exercise_type?: string | null
           id?: string
+          image?: string | null
           instructions?: string | null
           is_active?: boolean | null
           is_draft?: boolean | null
@@ -231,11 +363,13 @@ export type Database = {
         Update: {
           coach_id?: string | null
           created_at?: string | null
+          cues_and_tips?: string | null
           default_unit?: string | null
           difficulty?: string | null
           equipment?: string | null
           exercise_type?: string | null
           id?: string
+          image?: string | null
           instructions?: string | null
           is_active?: boolean | null
           is_draft?: boolean | null
@@ -424,6 +558,75 @@ export type Database = {
           },
         ]
       }
+      mobility_videos: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          difficulty: string | null
+          duration: number | null
+          id: string
+          is_favorite: boolean | null
+          thumbnail_url: string | null
+          title: string
+          video_url: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          difficulty?: string | null
+          duration?: number | null
+          id?: string
+          is_favorite?: boolean | null
+          thumbnail_url?: string | null
+          title: string
+          video_url: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          difficulty?: string | null
+          duration?: number | null
+          id?: string
+          is_favorite?: boolean | null
+          thumbnail_url?: string | null
+          title?: string
+          video_url?: string
+        }
+        Relationships: []
+      }
+      mobilityassessments: {
+        Row: {
+          created_at: string | null
+          date: string
+          email: string
+          id: number
+          joint: string
+          min_angle: number
+          name: string
+          side: string
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          email: string
+          id?: never
+          joint: string
+          min_angle: number
+          name: string
+          side: string
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          email?: string
+          id?: never
+          joint?: string
+          min_angle?: number
+          name?: string
+          side?: string
+        }
+        Relationships: []
+      }
       program_assignments: {
         Row: {
           assigned_at: string | null
@@ -605,6 +808,7 @@ export type Database = {
           id: string
           profile_image_url: string | null
           role: string | null
+          stream_user_id: string | null
         }
         Insert: {
           created_at?: string | null
@@ -613,6 +817,7 @@ export type Database = {
           id: string
           profile_image_url?: string | null
           role?: string | null
+          stream_user_id?: string | null
         }
         Update: {
           created_at?: string | null
@@ -621,48 +826,10 @@ export type Database = {
           id?: string
           profile_image_url?: string | null
           role?: string | null
+          stream_user_id?: string | null
         }
         Relationships: []
       }
-      mobility_videos: {
-        Row: {
-          id: string;
-          title: string;
-          description: string | null;
-          video_url: string;
-          thumbnail_url: string | null;
-          category: string | null;
-          created_at: string | null;
-          difficulty: string | null;
-          duration: number | null;
-          is_favorite: boolean | null;
-        };
-        Insert: {
-          id?: string;
-          title: string;
-          description?: string | null;
-          video_url: string;
-          thumbnail_url?: string | null;
-          category?: string | null;
-          created_at?: string | null;
-          difficulty?: string | null;
-          duration?: number | null;
-          is_favorite?: boolean | null;
-        };
-        Update: {
-          id?: string;
-          title?: string;
-          description?: string | null;
-          video_url?: string;
-          thumbnail_url?: string | null;
-          category?: string | null;
-          created_at?: string | null;
-          difficulty?: string | null;
-          duration?: number | null;
-          is_favorite?: boolean | null;
-        };
-        Relationships: [];
-      };
       workout_blocks: {
         Row: {
           created_at: string | null
@@ -772,6 +939,10 @@ export type Database = {
       }
     }
     Functions: {
+      clear_day: {
+        Args: { day: string; client_id: string }
+        Returns: undefined
+      }
       create_full_workout: {
         Args: { workout_data: Json }
         Returns: undefined
@@ -779,6 +950,16 @@ export type Database = {
       custom_access_token_hook: {
         Args: { event: Json }
         Returns: Json
+      }
+      get_client_schedule: {
+        Args: { client: string; start: string; days: number }
+        Returns: {
+          date: string
+          workout_id: string
+          workout_name: string
+          is_rest_day: boolean
+          notes: string
+        }[]
       }
       get_current_program_day: {
         Args: { client_uuid: string }
@@ -812,6 +993,22 @@ export type Database = {
         Args: { exercise_name: string }
         Returns: string
       }
+      get_max_weight: {
+        Args: { p_exercise_name: string; p_client_uuid: string }
+        Returns: {
+          client_name: string
+          queried_exercise_name: string
+          max_weight: number
+        }[]
+      }
+      get_max_weight_for_user: {
+        Args: { exercise_name_input: string; client_name_input: string }
+        Returns: {
+          client_name: string
+          exercise_name: string
+          max_weight: number
+        }[]
+      }
       get_or_create_conversation: {
         Args: { user_a: string; user_b: string }
         Returns: string
@@ -830,6 +1027,18 @@ export type Database = {
           muscles_trained: string
         }[]
       }
+      maintain_12_week_schedule: {
+        Args: { p_client_id: string }
+        Returns: undefined
+      }
+      move_day: {
+        Args: { from_date: string; to_date: string; client_id: string }
+        Returns: undefined
+      }
+      populate_4_week_schedule: {
+        Args: { p_client_id: string }
+        Returns: undefined
+      }
       send_message: {
         Args: {
           p_conversation_id: string
@@ -839,6 +1048,10 @@ export type Database = {
           p_file_name?: string
         }
         Returns: string
+      }
+      swap_days: {
+        Args: { date1: string; date2: string; client_id: string }
+        Returns: undefined
       }
     }
     Enums: {
@@ -851,21 +1064,25 @@ export type Database = {
   }
 }
 
-type DefaultSchema = Database[Extract<keyof Database, "public">]
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    | { schema: keyof Database },
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R
@@ -883,14 +1100,16 @@ export type Tables<
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
-    | { schema: keyof Database },
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
     }
     ? I
@@ -906,14 +1125,16 @@ export type TablesInsert<
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
-    | { schema: keyof Database },
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
     }
     ? U
@@ -929,14 +1150,16 @@ export type TablesUpdate<
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
-    | { schema: keyof Database },
+    | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
-> = DefaultSchemaEnumNameOrOptions extends { schema: keyof Database }
-  ? Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
@@ -944,14 +1167,16 @@ export type Enums<
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof Database },
+    | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
-> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never

@@ -36,6 +36,10 @@ export default function ExerciseDetailScreen({ route, navigation }: any) {
       setExercises([initialExercise]);
       setCurrentMode('single');
     }
+    // Restore logs if passed in
+    if (route.params?.allSetLogs) {
+      setAllSetLogs(route.params.allSetLogs);
+    }
     console.log('[DEBUG] useEffect - currentMode:', currentMode);
   }, [initialExercise, allExercises, fullWorkout]);
 
@@ -117,6 +121,7 @@ export default function ExerciseDetailScreen({ route, navigation }: any) {
           workoutId: workoutId,
           programId: programId,
           day: day,
+          allSetLogs: allSetLogs, // pass logs forward
         });
       } else {
         console.log('[DEBUG] Navigating to next superset/circuit group');
@@ -128,6 +133,7 @@ export default function ExerciseDetailScreen({ route, navigation }: any) {
           workoutId: workoutId,
           programId: programId,
           day: day,
+          allSetLogs: allSetLogs, // pass logs forward
         });
       }
     } else {
@@ -151,14 +157,82 @@ export default function ExerciseDetailScreen({ route, navigation }: any) {
     }
   };
 
+  // Find the previous exercise group in the full workout
+  const findPreviousExerciseGroup = () => {
+    if (fullWorkoutExercises.length === 0) return null;
+
+    // Find the current group's exercises in the full workout
+    const currentExerciseNames = exercises.map(ex => ex.name);
+    const currentGroupStartIndex = fullWorkoutExercises.findIndex(ex =>
+      currentExerciseNames.includes(ex.name)
+    );
+
+    if (currentGroupStartIndex === -1) return null;
+
+    // Find the previous group
+    const prevGroupEndIndex = currentGroupStartIndex - 1;
+    if (prevGroupEndIndex < 0) return null;
+
+    // Now, walk backwards to find the start of the previous group
+    // If previous is a circuit/superset, it will have .circuitGroup/.supersetGroup
+    const prevExercise = fullWorkoutExercises[prevGroupEndIndex];
+    if (prevExercise.isCircuit && prevExercise.circuitGroup) {
+      return {
+        type: 'circuit',
+        exercises: prevExercise.circuitGroup,
+        name: workoutName || 'Circuit Workout',
+      };
+    } else if (prevExercise.isSuperset && prevExercise.supersetGroup) {
+      return {
+        type: 'superset',
+        exercises: prevExercise.supersetGroup,
+        name: workoutName || 'Superset Workout',
+      };
+    } else {
+      return {
+        type: 'single',
+        exercise: prevExercise,
+      };
+    }
+  };
+
+  const goToPreviousGroup = () => {
+    const prevGroup = findPreviousExerciseGroup();
+    if (prevGroup) {
+      if (prevGroup.type === 'single') {
+        navigation.replace('ExerciseDetail', {
+          exercise: prevGroup.exercise,
+          fullWorkout: fullWorkoutExercises,
+          workoutName: workoutName,
+          workoutId: workoutId,
+          programId: programId,
+          day: day,
+          allSetLogs: allSetLogs, // pass logs backward
+        });
+      } else {
+        navigation.replace('ExerciseDetail', {
+          allExercises: prevGroup.exercises,
+          workoutName: prevGroup.name,
+          totalDuration: prevGroup.type === 'circuit' ? '20 minutes' : '15 minutes',
+          fullWorkout: fullWorkoutExercises,
+          workoutId: workoutId,
+          programId: programId,
+          day: day,
+          allSetLogs: allSetLogs, // pass logs backward
+        });
+      }
+    } else {
+      // If no previous group, go back to workout screen
+      navigation.goBack();
+    }
+  };
+
   const handlePreviousExercise = () => {
     if (currentExerciseIndex > 0) {
       setCurrentExerciseIndex(currentExerciseIndex - 1);
     } else {
-      // We're at the beginning of current group, check if there's a previous group
-      // This would require tracking the previous group, which is more complex
-      // For now, just go back to the workout screen
-      navigation.goBack();
+      // At the beginning of current group, go to previous group if possible
+      goToPreviousGroup();
     }
   };
 
@@ -173,6 +247,31 @@ export default function ExerciseDetailScreen({ route, navigation }: any) {
 
   const handleSelectExercise = (index: number) => {
     setCurrentExerciseIndex(index);
+  };
+
+  // Helper: are we on the last group/exercise?
+  const isTrulyLastGroup = () => {
+    if (fullWorkoutExercises.length === 0) return isLastExercise();
+    // Find current group start index
+    const currentExerciseNames = exercises.map(ex => ex.name);
+    const currentGroupStartIndex = fullWorkoutExercises.findIndex(ex =>
+      currentExerciseNames.includes(ex.name)
+    );
+    if (currentGroupStartIndex === -1) return isLastExercise();
+    // If next group would be out of bounds, this is the last group
+    const nextGroupStartIndex = currentGroupStartIndex + exercises.length;
+    return nextGroupStartIndex >= fullWorkoutExercises.length;
+  };
+
+  // Handler for Complete Workout button
+  const handleCompleteWorkout = () => {
+    navigation.navigate('WorkoutComplete', {
+      workoutId: workoutId,
+      workoutName: workoutName,
+      programId: programId,
+      day: day,
+      setLogs: allSetLogs
+    });
   };
 
   if (!currentExercise) {
@@ -200,6 +299,8 @@ export default function ExerciseDetailScreen({ route, navigation }: any) {
           }}
           allSetLogs={allSetLogs}
           fullWorkoutExercises={fullWorkoutExercises}
+          showFinalNavigation={isTrulyLastGroup()}
+          onCompleteWorkout={handleCompleteWorkout}
         />
       ) : (
         <SupersetExerciseComponent
@@ -215,6 +316,8 @@ export default function ExerciseDetailScreen({ route, navigation }: any) {
           isLastGroup={isLastExercise()}
           blockType={currentMode}
           onSelectExercise={handleSelectExercise}
+          showFinalNavigation={isTrulyLastGroup()}
+          onCompleteWorkout={handleCompleteWorkout}
         />
       )}
     </SafeAreaView>
