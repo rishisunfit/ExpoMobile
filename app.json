@@ -19,7 +19,9 @@
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library.",
         "NSMicrophoneUsageDescription": "This app uses the microphone for voice messages.",
         "NSFileProviderDomainUsageDescription": "This app needs access to your files."
-      }
+      },
+      "bundleIdentifier": "com.rish.PTF-Mobile-Round1",
+      "appleTeamId": "2QLDFNF25N"
     },
     "android": {
       "adaptiveIcon": {
@@ -27,7 +29,13 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "permissions": ["android.permission.RECORD_AUDIO"]
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -36,15 +44,15 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app accesses your photos.",
-          "cameraPermission": "The app accesses your camera.",
-          "microphonePermission": "The app accesses your microphone."
+          "photosPermission": "The app accesses your photos to send photos in a message.",
+          "cameraPermission": "The app accesses your camera to upload assessment videos.",
+          "microphonePermission": "The app accesses your microphone to upload assessment videos."
         }
       ],
       [
         "expo-document-picker",
         {
-          "filePermission": "The app needs access to your files."
+          "filePermission": "The app needs access to your files to upload assessment videos."
         }
       ],
       [
@@ -71,6 +79,22 @@
         {
           "photosPermission": "$(PRODUCT_NAME) would like access to your photo gallery to share image in a message.",
           "savePhotosPermission": "$(PRODUCT_NAME) would like to save photos to your photo gallery after downloading from a message."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to upload assessment videos",
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone to upload assessment videos",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.0"
+          }
         }
       ]
     ]

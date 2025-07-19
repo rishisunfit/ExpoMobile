@@ -17,6 +17,7 @@ import VideoMobilityScreen from "../screens/VideoMobilityScreen";
 import { ChannelScreen } from "../screens/CoachChatScreen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider } from "../context/ChatContext";
+import VideoRecorderScreen from "../screens/VideoRecorderScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -86,6 +87,11 @@ export function AppNavigator() {
             name="ChannelScreen"
             component={ChannelScreen}
             options={{ headerShown: true, title: "Chat" }}
+          />
+          <Stack.Screen
+            name="VideoRecorderScreen"
+            component={VideoRecorderScreen}
+            options={{ headerShown: true, title: "Record Video" }}
           />
         </Stack.Navigator>
       </AppProvider>
