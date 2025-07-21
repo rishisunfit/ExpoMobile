@@ -110,7 +110,7 @@ export function AppNavigator() {
           <Stack.Screen
             name="ChannelScreen"
             component={ChannelScreen}
-            options={{ headerShown: true, title: "Chat" }}
+            options={{ headerShown: true, title: "Chat", headerBackTitle: "Back" }}
           />
         </Stack.Navigator>
       </AppProvider>
