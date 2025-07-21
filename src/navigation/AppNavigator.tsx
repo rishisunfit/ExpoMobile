@@ -22,6 +22,7 @@ import AnkleDorsiflexion from "../screens/IndividualAssessmentScreens/AnkleDorsi
 import HipInternalRotation from "../screens/IndividualAssessmentScreens/HipInternalRotation";
 import { ChannelScreen } from "../screens/CoachChatScreen";
 import { AppProvider } from "../context/ChatContext";
+import VideoRecorderScreen from "../screens/VideoRecorderScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -111,6 +112,11 @@ export function AppNavigator() {
             name="ChannelScreen"
             component={ChannelScreen}
             options={{ headerShown: true, title: "Chat", headerBackTitle: "Back" }}
+          />
+          <Stack.Screen
+            name="VideoRecorderScreen"
+            component={VideoRecorderScreen}
+            options={{ headerShown: true, title: "Record Video" }}
           />
         </Stack.Navigator>
       </AppProvider>

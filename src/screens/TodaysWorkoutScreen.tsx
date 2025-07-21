@@ -1,97 +1,102 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card } from '../components/common/Card';
-import { Typography } from '../components/common/Typography';
-import Icon from 'react-native-vector-icons/FontAwesome6';
-import { COLORS, SPACING } from '../styles';
-import { supabase } from '../../lib/supabase';
-
-const { width } = Dimensions.get('window');
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  ScrollView,
+  Dimensions,
+  ActivityIndicator,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Card } from "../components/common/Card";
+import { Typography } from "../components/common/Typography";
+import Icon from "react-native-vector-icons/FontAwesome6";
+import { COLORS, SPACING } from "../styles";
+import { supabase } from "../../lib/supabase";
 
 export default function TodaysWorkoutScreen({ navigation }: any) {
-  const [workoutName, setWorkoutName] = useState('Loading...');
+  const [workoutName, setWorkoutName] = useState("Loading...");
   const [workoutId, setWorkoutId] = useState<string | null>(null);
   const [exercises, setExercises] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [programId, setProgramId] = useState<string | null>(null);
   const [targetDay, setTargetDay] = useState<number | null>(null);
-  const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTodaysWorkout = async () => {
       try {
-        
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
         if (authError) {
-          console.error('❌ Auth error:', authError);
-          setWorkoutName('Auth Error');
+          console.error("❌ Auth error:", authError);
+          setWorkoutName("Auth Error");
           return;
         }
-        
+
         if (user) {
           // First, get the current program day
-          const { data: dayData, error: dayError } = await supabase.rpc('get_current_program_day', {
-            client_uuid: user.id
-          });
+          const { data: dayData, error: dayError } = await supabase.rpc(
+            "get_current_program_day",
+            {
+              client_uuid: user.id,
+            }
+          );
 
           if (dayError) {
-            console.error('❌ Error fetching current program day:', dayError);
-            setWorkoutName('Error Loading Day');
+            console.error("❌ Error fetching current program day:", dayError);
+            setWorkoutName("Error Loading Day");
             return;
           }
 
           // Extract the day value and program_id (adjust if your RPC returns different fields)
           const dayInfo = dayData && dayData.length > 0 ? dayData[0] : null;
           if (!dayInfo) {
-            setWorkoutName('No Program Day');
+            setWorkoutName("No Program Day");
             return;
           }
 
           const currentDay = dayInfo.day;
           const currentProgramId = dayInfo.program_id; // Assuming this field exists
-          
+
           setTargetDay(currentDay as number);
           setProgramId(currentProgramId as string);
 
           // Now, get the workout name and ID for the current day
-          const { data: workoutData, error: workoutError } = await supabase.rpc('get_day_workouts', {
-            client_uuid: user.id,
-            target_day: currentDay
-          });
-          
+          const { data: workoutData, error: workoutError } = await supabase.rpc(
+            "get_day_workouts",
+            {
+              client_uuid: user.id,
+              target_day: currentDay,
+            }
+          );
+
           if (workoutError) {
-            console.error('❌ Error fetching workout:', workoutError);
-            setWorkoutName('Workout Not Found');
+            console.error("❌ Error fetching workout:", workoutError);
+            setWorkoutName("Workout Not Found");
             return;
           }
-          
+
           if (workoutData && workoutData.length > 0) {
-            const workout: any = workoutData[0];
-            setWorkoutName(workout.workout_name || 'Workout Not Found');
+            const workout = workoutData[0];
+            setWorkoutName(workout.workout_name || "Workout Not Found");
             setWorkoutId(workout.workout_id as string); // Store the workout ID
-            // Fetch cover_photo from workouts table
-            let coverPhotoUrl = null;
+
+            // Now fetch the exercise details
             if (workout.workout_id) {
-              const { data: workoutRow, error: workoutRowError } = await supabase
-                .from('workouts')
-                .select('cover_photo')
-                .eq('id', workout.workout_id)
-                .single();
-              if (!workoutRowError && workoutRow && workoutRow.cover_photo) {
-                coverPhotoUrl = workoutRow.cover_photo;
-              }
-              setCoverPhoto(coverPhotoUrl);
               await fetchWorkoutExercises(workout.workout_id as string);
             }
           } else {
-            setWorkoutName('No Workout Today');
+            setWorkoutName("No Workout Today");
           }
         }
       } catch (err) {
-        console.error('❌ Unexpected error:', err);
-        setWorkoutName('Error Loading Workout');
+        console.error("❌ Unexpected error:", err);
+        setWorkoutName("Error Loading Workout");
       } finally {
         setLoading(false);
       }
@@ -99,7 +104,7 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
 
     const fetchWorkoutExercises = async (workoutId: string) => {
       try {
-        const { data, error } = await supabase.rpc('get_workout_preview', {
+        const { data, error } = await supabase.rpc("get_workout_preview", {
           workout_uuid: workoutId,
         });
         if (error) {
@@ -107,52 +112,60 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
           return;
         }
         // Batch fetch images from exercise_library
-        const exerciseIds = Array.from(new Set(data.map((item: any) => item.exercise_id)));
+        const exerciseIds = Array.from(
+          new Set(data.map((item: any) => item.exercise_id))
+        );
         let imageMap: Record<string, string> = {};
         if (exerciseIds.length > 0) {
           const { data: imageRows, error: imageError } = await supabase
-            .from('exercise_library')
-            .select('id, image')
-            .in('id', exerciseIds);
+            .from("exercise_library")
+            .select("id, image")
+            .in("id", exerciseIds);
           if (imageError) {
-            console.error('❌ Error fetching exercise images:', imageError);
+            console.error("❌ Error fetching exercise images:", imageError);
           } else if (imageRows) {
-            imageMap = imageRows.reduce((acc: Record<string, string>, row: any) => {
-              acc[row.id] = row.image;
-              return acc;
-            }, {});
+            imageMap = imageRows.reduce(
+              (acc: Record<string, string>, row: any) => {
+                acc[row.id] = row.image;
+                return acc;
+              },
+              {}
+            );
           }
         }
         // Transform the data into the format expected by the UI, passing the image map
         const transformedExercises = transformExerciseData(data, imageMap);
         setExercises(transformedExercises);
       } catch (err) {
-        console.error('❌ Error fetching exercises:', err);
+        console.error("❌ Error fetching exercises:", err);
       }
     };
 
     // Accept imageMap as a parameter
-    const transformExerciseData = (data: any[], imageMap: Record<string, string> = {}) => {
+    const transformExerciseData = (
+      data: any[],
+      imageMap: Record<string, string> = {}
+    ) => {
       // Group exercises by exercise_name and aggregate sets/reps
       const exerciseMap = new Map();
       data.forEach((item: any) => {
         const key = item.exercise_name;
         if (!exerciseMap.has(key)) {
           exerciseMap.set(key, {
-            id: item.exercise_id, // <-- GOOD: this is the UUID
+            id: key,
             name: item.exercise_name,
             muscles: item.muscles_trained,
-            image: imageMap[item.exercise_id] || '', // Use fetched image or blank
+            image: imageMap[item.exercise_id] || "", // Use fetched image or blank
             setDetails: [],
             blockType: item.block_type,
-            orderIndex: item.order_index
+            orderIndex: item.order_index,
           });
         }
         const exercise = exerciseMap.get(key);
         exercise.setDetails.push({
           setNumber: item.set_number,
           setType: item.set_type,
-          reps: item.reps
+          reps: item.reps,
         });
       });
       // Sort by order_index to maintain proper sequence
@@ -161,7 +174,7 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
       // Mark superset and circuit exercises as before
       const supersetGroups = new Map();
       exercisesArray.forEach((exercise: any) => {
-        if (exercise.blockType === 'superset') {
+        if (exercise.blockType === "superset") {
           const key = `${exercise.blockType}_${exercise.orderIndex}`;
           if (!supersetGroups.has(key)) {
             supersetGroups.set(key, []);
@@ -179,7 +192,7 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
       });
       const circuitGroups = new Map();
       exercisesArray.forEach((exercise: any) => {
-        if (exercise.blockType === 'circuit') {
+        if (exercise.blockType === "circuit") {
           const key = `${exercise.blockType}_${exercise.orderIndex}`;
           if (!circuitGroups.has(key)) {
             circuitGroups.set(key, []);
@@ -241,39 +254,39 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
   const handleStartWorkout = () => {
     if (exercises && exercises.length > 0) {
       const firstExercise = exercises[0];
-      
+
       // Check if first exercise is part of a circuit
       if (firstExercise.isCircuit && firstExercise.circuitGroup) {
         // Navigate to circuit mode with just the circuit group
-        navigation.navigate('ExerciseDetail', { 
+        navigation.navigate("ExerciseDetail", {
           allExercises: firstExercise.circuitGroup,
           workoutName: workoutName,
           workoutId: workoutId,
           programId: programId,
           day: targetDay,
-          totalDuration: '20 minutes',
-          fullWorkout: exercises
+          totalDuration: "20 minutes",
+          fullWorkout: exercises,
         });
       } else if (firstExercise.isSuperset && firstExercise.supersetGroup) {
         // Navigate to superset mode with just the superset group
-        navigation.navigate('ExerciseDetail', { 
+        navigation.navigate("ExerciseDetail", {
           allExercises: firstExercise.supersetGroup,
           workoutName: workoutName,
           workoutId: workoutId,
           programId: programId,
           day: targetDay,
-          totalDuration: '15 minutes',
-          fullWorkout: exercises
+          totalDuration: "15 minutes",
+          fullWorkout: exercises,
         });
       } else {
         // Navigate to single exercise mode
-        navigation.navigate('ExerciseDetail', { 
+        navigation.navigate("ExerciseDetail", {
           exercise: firstExercise,
           workoutName: workoutName,
           workoutId: workoutId,
           programId: programId,
           day: targetDay,
-          fullWorkout: exercises
+          fullWorkout: exercises,
         });
       }
     } else {
@@ -283,7 +296,10 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background.secondary }}>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: COLORS.background.secondary }}
+        edges={["top", "left", "right"]}
+      >
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading workout...</Text>
@@ -293,17 +309,22 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background.secondary }}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: COLORS.background.secondary }}
+      edges={["top", "left", "right"]}
+    >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
           <Icon name="chevron-left" size={16} color={COLORS.text.primary} />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Typography.H2 style={styles.headerTitle}>Today's Workout</Typography.H2>
+          <Typography.H2 style={styles.headerTitle}>
+            Today's Workout
+          </Typography.H2>
           <Typography.Subtext>{workoutName}</Typography.Subtext>
         </View>
       </View>
@@ -312,17 +333,25 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
         {/* Workout Cover */}
         <View style={styles.workoutCover}>
           <Image
-            source={{ uri: coverPhoto || 'https://storage.googleapis.com/uxpilot-auth.appspot.com/f87bb8eb54-29e9ef32f3de3995d7f0.png' }}
+            source={{
+              uri: "https://storage.googleapis.com/uxpilot-auth.appspot.com/f87bb8eb54-29e9ef32f3de3995d7f0.png",
+            }}
             style={styles.coverImage}
             resizeMode="cover"
           />
           <View style={styles.coverOverlay}>
             <View style={styles.coverContent}>
               <View style={styles.coverInfo}>
-                <Typography.H1 style={styles.coverTitle}>{workoutName}</Typography.H1>
+                <Typography.H1 style={styles.coverTitle}>
+                  {workoutName}
+                </Typography.H1>
                 <View style={styles.coverStats}>
                   <View style={styles.coverStat}>
-                    <Icon name="clock" size={14} color="rgba(255,255,255,0.8)" />
+                    <Icon
+                      name="clock"
+                      size={14}
+                      color="rgba(255,255,255,0.8)"
+                    />
                     <Text style={styles.coverStatText}>45 min</Text>
                   </View>
                   <View style={styles.coverStat}>
@@ -331,7 +360,10 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
                   </View>
                 </View>
               </View>
-              <TouchableOpacity style={styles.startWorkoutButton} onPress={handleStartWorkout}>
+              <TouchableOpacity
+                style={styles.startWorkoutButton}
+                onPress={handleStartWorkout}
+              >
                 <Text style={styles.startWorkoutButtonText}>Start Workout</Text>
               </TouchableOpacity>
             </View>
@@ -344,7 +376,9 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
             <View style={styles.overviewHeader}>
               <Typography.H2>Workout Overview</Typography.H2>
               <View style={styles.exerciseCount}>
-                <Text style={styles.exerciseCountText}>{exercises.length} Exercises</Text>
+                <Text style={styles.exerciseCountText}>
+                  {exercises.length} Exercises
+                </Text>
               </View>
             </View>
             <View style={styles.overviewStats}>
@@ -353,7 +387,9 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
                 <Text style={styles.overviewStatLabel}>Minutes</Text>
               </View>
               <View style={styles.overviewStat}>
-                <Text style={styles.overviewStatNumber}>{calculateTotalSets()}</Text>
+                <Text style={styles.overviewStatNumber}>
+                  {calculateTotalSets()}
+                </Text>
                 <Text style={styles.overviewStatLabel}>Total Sets</Text>
               </View>
             </View>
@@ -362,7 +398,9 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
 
         {/* Exercise List */}
         <View style={styles.exerciseSection}>
-          <Typography.H2 style={styles.exerciseSectionTitle}>Exercises</Typography.H2>
+          <Typography.H2 style={styles.exerciseSectionTitle}>
+            Exercises
+          </Typography.H2>
           {/* Group exercises by name, then by reps batch */}
           {(() => {
             // Map: exercise_name -> [{ ...exercise, setDetails: [...] }]
@@ -390,10 +428,10 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
               const isCircuit = firstBatch.isCircuit;
               const isSuperset = firstBatch.isSuperset;
               // Only show connector if this is NOT the last card in the group
-              const isNotLast = idx < nameEntries.length - 1 && (
-                (isSuperset && nameEntries[idx + 1][1][0].isSuperset) ||
-                (isCircuit && nameEntries[idx + 1][1][0].isCircuit)
-              );
+              const isNotLast =
+                idx < nameEntries.length - 1 &&
+                ((isSuperset && nameEntries[idx + 1][1][0].isSuperset) ||
+                  (isCircuit && nameEntries[idx + 1][1][0].isCircuit));
               return (
                 <React.Fragment key={exerciseName + idx}>
                   <Card style={styles.exerciseCard}>
@@ -409,23 +447,54 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
                         </View>
                       </View>
                       <View style={styles.exerciseInfo}>
-                        <Typography.H2 style={styles.exerciseName}>{exerciseName}</Typography.H2>
-                        <Typography.Subtext style={styles.exerciseMuscles}>{firstBatch.muscles}</Typography.Subtext>
+                        <Typography.H2 style={styles.exerciseName}>
+                          {exerciseName}
+                        </Typography.H2>
+                        <Typography.Subtext style={styles.exerciseMuscles}>
+                          {firstBatch.muscles}
+                        </Typography.Subtext>
                         {/* Render each reps group as a row */}
-                        {Array.from(repsMap.entries()).map(([reps, sets], batchIdx) => (
-                          <View key={batchIdx} style={styles.exerciseDetails}>
-                            <View style={[styles.setsBadge, isSuperset && styles.supersetBadge, isCircuit && styles.circuitBadge]}>
-                              <Text style={[styles.setsBadgeText, isSuperset && styles.supersetBadgeText, isCircuit && styles.circuitBadgeText]}>{sets.length} sets</Text>
+                        {Array.from(repsMap.entries()).map(
+                          ([reps, sets], batchIdx) => (
+                            <View key={batchIdx} style={styles.exerciseDetails}>
+                              <View
+                                style={[
+                                  styles.setsBadge,
+                                  isSuperset && styles.supersetBadge,
+                                  isCircuit && styles.circuitBadge,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.setsBadgeText,
+                                    isSuperset && styles.supersetBadgeText,
+                                    isCircuit && styles.circuitBadgeText,
+                                  ]}
+                                >
+                                  {sets.length} sets
+                                </Text>
+                              </View>
+                              <Text style={styles.repsText}>{reps} reps</Text>
                             </View>
-                            <Text style={styles.repsText}>{reps} reps</Text>
-                          </View>
-                        ))}
+                          )
+                        )}
                       </View>
                     </View>
                   </Card>
                   {isSuperset && isNotLast && (
-                    <View style={{ alignItems: 'center', marginTop: -16, marginBottom: 0, zIndex: 10 }}>
-                      <Icon name="arrows-up-down" size={20} color={COLORS.secondary} />
+                    <View
+                      style={{
+                        alignItems: "center",
+                        marginTop: -16,
+                        marginBottom: 0,
+                        zIndex: 10,
+                      }}
+                    >
+                      <Icon
+                        name="arrows-up-down"
+                        size={20}
+                        color={COLORS.secondary}
+                      />
                     </View>
                   )}
                   {isCircuit && isNotLast && (
@@ -437,8 +506,16 @@ export default function TodaysWorkoutScreen({ navigation }: any) {
               );
             });
           })()}
-          <TouchableOpacity style={styles.bottomStartButton} onPress={handleStartWorkout}>
-            <Icon name="dumbbell" size={20} color="#fff" style={{ marginRight: 12 }} />
+          <TouchableOpacity
+            style={styles.bottomStartButton}
+            onPress={handleStartWorkout}
+          >
+            <Icon
+              name="dumbbell"
+              size={20}
+              color="#fff"
+              style={{ marginRight: 12 }}
+            />
             <Text style={styles.bottomStartButtonText}>Start Workout</Text>
           </TouchableOpacity>
         </View>
@@ -456,17 +533,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderBottomColor: "#f1f5f9",
+    flexDirection: "row",
+    alignItems: "center",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#f8fafc',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: SPACING.md,
   },
   headerContent: {
@@ -476,51 +553,51 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   workoutCover: {
-    position: 'relative',
+    position: "relative",
     height: 256,
   },
   coverImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   coverOverlay: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    height: '100%',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    height: "100%",
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
   coverContent: {
-    position: 'absolute',
+    position: "absolute",
     bottom: SPACING.lg,
     left: SPACING.md,
     right: SPACING.md,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
   },
   coverInfo: {
     flex: 1,
   },
   coverTitle: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: SPACING.sm,
   },
   coverStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: SPACING.lg,
   },
   coverStat: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   coverStatText: {
-    color: 'rgba(255,255,255,0.8)',
+    color: "rgba(255,255,255,0.8)",
     fontSize: 14,
   },
   startWorkoutButton: {
@@ -530,9 +607,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   startWorkoutButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   overviewSection: {
     paddingHorizontal: SPACING.md,
@@ -543,9 +620,9 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   overviewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: SPACING.lg,
   },
   exerciseCount: {
@@ -557,19 +634,19 @@ const styles = StyleSheet.create({
   exerciseCountText: {
     color: COLORS.primary,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   overviewStats: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: SPACING.xl,
   },
   overviewStat: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   overviewStatNumber: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: COLORS.text.primary,
   },
   overviewStatLabel: {
@@ -588,29 +665,29 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   exerciseContent: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: SPACING.md,
   },
   exerciseImageWrapper: {
-    position: 'relative',
+    position: "relative",
     width: 80,
     height: 80,
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   exerciseImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   exercisePlayOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(0,0,0,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   exerciseInfo: {
     flex: 1,
@@ -622,12 +699,12 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   exerciseDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: SPACING.md,
   },
   setsBadge: {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: "#f1f5f9",
     paddingHorizontal: SPACING.md,
     paddingVertical: 4,
     borderRadius: 20,
@@ -635,7 +712,7 @@ const styles = StyleSheet.create({
   setsBadgeText: {
     color: COLORS.text.primary,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   supersetBadge: {
     backgroundColor: COLORS.status.good,
@@ -648,7 +725,7 @@ const styles = StyleSheet.create({
   supersetBadgeText: {
     color: COLORS.secondary,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   repsText: {
     color: COLORS.text.secondary,
@@ -656,13 +733,13 @@ const styles = StyleSheet.create({
   },
   bottomStartButton: {
     backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: SPACING.lg,
     borderRadius: 16,
     marginTop: SPACING.xl,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
@@ -672,24 +749,24 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   bottomStartButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   supersetIconContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginVertical: -SPACING.sm,
     zIndex: 1,
   },
   circuitIconContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginVertical: -SPACING.sm,
     zIndex: 1,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingText: {
     marginTop: 16,
@@ -697,15 +774,15 @@ const styles = StyleSheet.create({
     color: COLORS.text.secondary,
   },
   skeletonText: {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: "#f1f5f9",
     borderRadius: 4,
     marginBottom: 8,
   },
   circuitBadge: {
-    backgroundColor: '#f3e8ff',
+    backgroundColor: "#f3e8ff",
     borderWidth: 1,
-    borderColor: '#a855f7',
-    shadowColor: '#a855f7',
+    borderColor: "#a855f7",
+    shadowColor: "#a855f7",
     shadowOffset: {
       width: 0,
       height: 0,
@@ -715,7 +792,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   circuitBadgeText: {
-    color: '#7c3aed',
-    fontWeight: '600',
+    color: "#7c3aed",
+    fontWeight: "600",
   },
-}); 
+});
